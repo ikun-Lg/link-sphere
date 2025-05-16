@@ -207,12 +207,6 @@ class _MyHomePageState extends State<MyHomePage> {
     // 跳过中间的创作按钮
     if (index == 2) return;
 
-    // 调整索引以匹配实际页面
-    int actualIndex = index;
-    if (index > 2) {
-      actualIndex = index - 1;
-    }
-
     setState(() {
       _selectedIndex = index;
     });
@@ -226,19 +220,19 @@ class _MyHomePageState extends State<MyHomePage> {
     // It seems the _pages array might be missing one page if _selectedIndex can go up to 4 and index > 2 means index -1 for _pages. 
     // Let's assume the existing logic for _pages and _selectedIndex is correct for now based on its usage.
     // Correct access to _pages with current _selectedIndex and _onItemTapped logic:
-    Widget currentPage;
-    if (_selectedIndex < 2) {
-      currentPage = _pages[_selectedIndex];
-    } else if (_selectedIndex > 2) { // For Message (index 3) and Profile (index 4)
-      currentPage = _pages[_selectedIndex -1]; // Accesses _pages[2] and _pages[3]
-    } else {
-      // This case should ideally not be reached if index == 2 is handled by return in _onItemTapped
-      // Or if the _selectedIndex is directly mapped without the placeholder
-      currentPage = const SizedBox.shrink(); // Fallback, though _onItemTapped prevents index 2
-    }
+    // Widget currentPage;
+    // if (_selectedIndex < 2) {
+    //   currentPage = _pages[_selectedIndex];
+    // } else if (_selectedIndex > 2) { // For Message (index 3) and Profile (index 4)
+    //   currentPage = _pages[_selectedIndex -1]; // Accesses _pages[2] and _pages[3]
+    // } else {
+    //   // This case should ideally not be reached if index == 2 is handled by return in _onItemTapped
+    //   // Or if the _selectedIndex is directly mapped without the placeholder
+    //   currentPage = const SizedBox.shrink(); // Fallback, though _onItemTapped prevents index 2
+    // }
 
     return Scaffold(
-      body: currentPage, // Use the determined current page
+      body: _pages[_selectedIndex], // Use the determined current page
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
