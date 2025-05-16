@@ -13,6 +13,13 @@ import 'services/api_service.dart'; // <--- 新增：导入 ApiService
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await UserService.init();
+  
+  // 添加全局错误处理
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    print('全局错误: ${details.exception}');
+    print('堆栈跟踪: ${details.stack}');
+  };
 
   String initialRoute = '/login'; // 默认为登录页
   final token = await UserService.getToken();

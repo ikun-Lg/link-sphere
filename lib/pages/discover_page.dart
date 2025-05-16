@@ -176,18 +176,19 @@ class _DiscoverPageState extends State<DiscoverPage> with SingleTickerProviderSt
       if (_selectedTabIndex == 0) { // 热门 Tab
         // --- 调用热门商品 API ---
         final response = await _apiService.getHotProducts();
-        if (response['code'] == 'SUCCESS_0000' && response['data']?['list'] != null) {
+        print('Hot Products Response: $response'); // 添加调试日志
+        if (response['code'] == 'SUCCESS_0000' && response['data'] is Map && response['data']['list'] is List) {
           final List<dynamic> productList = response['data']['list'];
           fetchedPosts = productList.map((json) {
             // --- 将 API 返回的商品数据映射到 DiscoverPost 模型 ---
             return DiscoverPost(
-              id: json['id'] ?? 0,
-              title: json['name'] ?? '无标题',
-              description: json['description'] ?? '',
-              imageUrl: json['mainImage'] ?? 'https://via.placeholder.com/300',
-              price: (json['price'] as num?)?.toDouble() ?? 0.0,
+              id: json is Map<String, dynamic> ? (json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()) ?? 0) : 0,
+              title: json is Map<String, dynamic> ? (json['name'] ?? '无标题') : '无标题',
+              description: json is Map<String, dynamic> ? (json['description'] ?? '') : '',
+              imageUrl: json is Map<String, dynamic> ? (json['mainImage'] ?? 'https://via.placeholder.com/300') : 'https://via.placeholder.com/300',
+              price: json is Map<String, dynamic> ? ((json['price'] is num) ? (json['price'] as num).toDouble() : double.tryParse(json['price'].toString()) ?? 0.0) : 0.0,
               shopName: '精选店铺', // API 暂无店铺名
-              sales: (json['sales'] as num?)?.toInt() ?? 0,
+              sales: json is Map<String, dynamic> ? ((json['sales'] is int) ? json['sales'] : int.tryParse(json['sales'].toString()) ?? 0) : 0,
               likes: 0, // API 暂无
               comments: 0, // API 暂无
             );
@@ -198,21 +199,21 @@ class _DiscoverPageState extends State<DiscoverPage> with SingleTickerProviderSt
         }
         // --- 热门 API 调用结束 ---
       } else if (_selectedTabIndex == 1) { // 推荐 Tab
-        // --- 修改：调用推荐商品 API ---
+        // --- 调用推荐商品 API ---
         final response = await _apiService.getRecommendedProducts();
+        print('Recommended Products Response: $response'); // 添加调试日志
         if (response['code'] == 'SUCCESS_0000' && response['data']?['list'] != null) {
           final List<dynamic> productList = response['data']['list'];
           fetchedPosts = productList.map((json) {
             // --- 将 API 返回的商品数据映射到 DiscoverPost 模型 ---
             return DiscoverPost(
-              id: json['id'] ?? 0,
-              title: json['name'] ?? '无标题',
-              description: json['description'] ?? '',
-              // 注意：推荐 API 返回的图片 URL 可能与热门不同，确保字段名正确
-              imageUrl: json['mainImage'] ?? 'https://via.placeholder.com/300',
-              price: (json['price'] as num?)?.toDouble() ?? 0.0,
+              id: json is Map<String, dynamic> ? (json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()) ?? 0) : 0,
+              title: json is Map<String, dynamic> ? (json['name'] ?? '无标题') : '无标题',
+              description: json is Map<String, dynamic> ? (json['description'] ?? '') : '',
+              imageUrl: json is Map<String, dynamic> ? (json['mainImage'] ?? 'https://via.placeholder.com/300') : 'https://via.placeholder.com/300',
+              price: json is Map<String, dynamic> ? ((json['price'] is num) ? (json['price'] as num).toDouble() : double.tryParse(json['price'].toString()) ?? 0.0) : 0.0,
               shopName: '推荐好店', // 可以给推荐商品不同的默认店铺名
-              sales: (json['sales'] as num?)?.toInt() ?? 0,
+              sales: json is Map<String, dynamic> ? ((json['sales'] is int) ? json['sales'] : int.tryParse(json['sales'].toString()) ?? 0) : 0,
               likes: 0, // API 暂无
               comments: 0, // API 暂无
             );
@@ -269,7 +270,8 @@ class _DiscoverPageState extends State<DiscoverPage> with SingleTickerProviderSt
         backgroundColor: Colors.white,
         elevation: 0.5,
         titleSpacing: 0,
-        // --- Remove Expanded from here ---
+        // 移除返回按钮
+        automaticallyImplyLeading: false,
         title: Container( // The Container is now the direct child of title
           height: 36,
           margin: const EdgeInsets.only(left: 16),
@@ -453,7 +455,7 @@ class _DiscoverPageState extends State<DiscoverPage> with SingleTickerProviderSt
                           final post = posts[index];
                           return GestureDetector(
                             onTap: () {
-                              _onProductTap(post.id as int) ;
+                              _onProductTap(post.id) ;
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(

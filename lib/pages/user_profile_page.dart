@@ -150,80 +150,81 @@ class _UserProfilePageState extends State<UserProfilePage>
 
   // 构建用户信息部分 - 接收 topPadding 参数
   Widget _buildUserInfoSection(double topPadding) {
-    return Container(
-      // 使用传入的 topPadding
-      padding: EdgeInsets.only(top: topPadding + 16, left: 16, right: 16, bottom: 16), // 在 AppBar 高度基础上再加一点间距
-      color: Colors.white,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min, // 让 Column 包裹内容
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 40,
-                backgroundImage: NetworkImage(_mockUserData['avatarUrl']),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildStatColumn('关注', _mockUserData['followingCount'].toString()),
-                    _buildStatColumn('粉丝', _mockUserData['followerCount'].toString()),
-                    _buildStatColumn('获赞与收藏', _mockUserData['likedCount'].toString()),
-                  ],
+    return SingleChildScrollView(
+      child: Container(
+        padding: EdgeInsets.only(top: topPadding + 16, left: 16, right: 16, bottom: 16),
+        color: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 40,
+                  backgroundImage: NetworkImage(_mockUserData['avatarUrl']),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _mockUserData['username'],
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _mockUserData['bio'],
-            style: const TextStyle(fontSize: 14, color: Colors.grey),
-            maxLines: 2, // 限制简介行数防止溢出
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildStatColumn('关注', _mockUserData['followingCount'].toString()),
+                      _buildStatColumn('粉丝', _mockUserData['followerCount'].toString()),
+                      _buildStatColumn('获赞与收藏', _mockUserData['likedCount'].toString()),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _mockUserData['username'],
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _mockUserData['bio'],
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      // TODO: 实现关注/取消关注逻辑
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: const Text('关注'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
                   onPressed: () {
-                    // TODO: 实现关注/取消关注逻辑
+                    // TODO: 实现私信逻辑
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red, // 小红书风格
-                    foregroundColor: Colors.white,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.black,
+                    side: const BorderSide(color: Colors.grey),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
                   ),
-                  child: const Text('关注'), // 按钮文字需要根据状态变化
+                  child: const Text('私信'),
                 ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: () {
-                  // TODO: 实现私信逻辑
-                },
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.black,
-                  side: const BorderSide(color: Colors.grey),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                child: const Text('私信'),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

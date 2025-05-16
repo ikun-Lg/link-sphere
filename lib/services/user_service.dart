@@ -4,6 +4,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 
 class UserService {
+  // 新增：本地更新头像url
+  static Future<void> setAvatar(String avatarUrl) async {
+    final user = await getUser();
+    if (user != null) {
+      final updatedUser = User(
+        id: user.id,
+        username: user.username,
+        token: user.token,
+        age: user.age,
+        bio: user.bio,
+        avatarUrl: avatarUrl,
+        followerCount: user.followerCount,
+        followCount: user.followCount,
+        favoriteCount: user.favoriteCount,
+      );
+      await saveUser(updatedUser);
+    }
+  }
+
   static const String _userKey = 'user_info';
   static const String _tokenKey = 'user_token';
   static late SharedPreferences _prefs;

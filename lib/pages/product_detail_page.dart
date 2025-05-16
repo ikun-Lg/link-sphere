@@ -2,8 +2,7 @@ import 'package:card_swiper/card_swiper.dart';
 import 'package:flutter/material.dart';
 import '../models/discover_model.dart';
 import '../services/api_service.dart'; // <--- 导入 ApiService
-import '../services/user_service.dart'; // <--- 导入 UserService (可能需要检查登录状态)
-import 'cart_page.dart'; // <--- 导入 CartPage
+import '../services/user_service.dart'; // <--- 导入 UserService (可能需要检查登录状态) // <--- 导入 CartPage
 
 class ProductDetailPage extends StatefulWidget {
   final DiscoverPost product;
@@ -163,29 +162,33 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       return;
     }
 
+    // 设置加载状态
     setState(() {
       _isAddingToCart = true;
     });
 
     try {
+      // 确保商品 ID 是整数
+      final productId = _productInfo!['id'] is int 
+        ? _productInfo!['id'] 
+        : int.tryParse(_productInfo!['id'].toString()) ?? 0;
+
+      if (productId == 0) {
+        throw '无效的商品 ID';
+      }
+
       final response = await _apiService.addToCart(
-        productId: _productInfo!['id'],
+        productId: productId, // 使用商品 ID
         productNum: quantity,
       );
+
+      // 处理响应
       if (response['code'] == 'SUCCESS_0000') {
-        // 确保 context 仍然可用
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response['data'] ?? '添加成功')), // 显示后端返回的成功信息
-        );
-        // 添加成功后跳转到购物车页面
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const CartPage()),
+          const SnackBar(content: Text('成功加入购物车')),
         );
       } else {
-        // 确保 context 仍然可用
-        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(response['info'] ?? '加入购物车失败')),
         );
@@ -268,7 +271,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                                         return const Center(child: CircularProgressIndicator());
                                       },
                                       errorBuilder: (context, error, stackTrace) {
-                                        return const Center(child: Icon(Icons.broken_image));
+                                        return Image.network(
+                                          'https://vcover-vt-pic.puui.qpic.cn/vcover_vt_pic/0/mzc00200aaogpgh1731229785085/0',
+                                          fit: BoxFit.cover,
+                                        );
                                       },
                                     )
                                   : const Center(child: Icon(Icons.image_not_supported)); // 占位图

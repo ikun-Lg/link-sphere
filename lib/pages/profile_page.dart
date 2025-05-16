@@ -64,6 +64,13 @@ class _ProfilePageState extends State<ProfilePage>
 
     _tabController.addListener(_handleTabSelection);
     _scrollController.addListener(_onScroll); // 添加滚动监听
+    // 监听页面返回时刷新（如从编辑资料页返回）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ModalRoute.of(context)?.addScopedWillPopCallback(() async {
+        await _loadUserInfo();
+        return true;
+      });
+    });
   }
 
   // --- 添加滚动监听方法 ---
@@ -686,7 +693,15 @@ class _ProfilePageState extends State<ProfilePage>
                                             return const Center(child: CircularProgressIndicator(strokeWidth: 2));
                                           },
                                           errorBuilder: (context, error, stackTrace) {
-                                            return const Center(child: Icon(Icons.broken_image, color: Colors.grey));
+                                            return Image.network(
+                                              'https://vcover-vt-pic.puui.qpic.cn/vcover_vt_pic/0/mzc00200n53vkqc1740479282101/0',
+                                              fit: BoxFit.cover,
+                                              width: double.infinity,
+                                              height: double.infinity,
+                                              errorBuilder: (context, error, stackTrace) {
+                                                return const Center(child: Icon(Icons.broken_image, color: Colors.grey));
+                                              },
+                                            );
                                           },
                                         )
                                       : Container( // 如果没有图片，显示占位符

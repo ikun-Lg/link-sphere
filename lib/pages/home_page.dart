@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:link_sphere/models/post.dart';
+import 'package:link_sphere/pages/cart_page.dart';
 import 'package:link_sphere/pages/post_detail_page.dart';
 import 'package:link_sphere/pages/search_result_page.dart';
 import 'package:link_sphere/pages/order_page.dart';
@@ -191,7 +192,7 @@ class _HomePageState extends State<HomePage>
                 title: const Text('我的购物车'),
                 onTap: () {
                   Navigator.pop(context); // 关闭抽屉
-                  Navigator.pushNamed(context, '/cart'); // 导航到购物车页面
+                  Navigator.push(context, MaterialPageRoute(builder: (context)=>CartPage()));
                 },
               ),
               ListTile(
@@ -277,18 +278,18 @@ class _HomePageState extends State<HomePage>
                             isDense: true,
                             contentPadding: EdgeInsets.zero,
                           ),
-                          onSubmitted:
-                              (value) => {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (context) => const SearchResultPage(
-                                          keyword: '搜索关键词',
-                                        ),
+                          onSubmitted: (value) {
+                            if (value.trim().isNotEmpty) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => SearchResultPage(
+                                    keyword: value.trim(),
                                   ),
                                 ),
-                              },
+                              );
+                            }
+                          },
                         ),
                       ),
                     ],
@@ -432,7 +433,17 @@ class PostCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (imageUrl.isNotEmpty) Image.network(imageUrl, fit: BoxFit.cover),
+            if (imageUrl.isNotEmpty)
+              Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Image.network(
+                    'https://vcover-vt-pic.puui.qpic.cn/vcover_vt_pic/0/mzc00200aaogpgh1731229785085/0',
+                    fit: BoxFit.cover,
+                  );
+                },
+              ),
             Padding(
               padding: const EdgeInsets.all(12),
               child: Column(

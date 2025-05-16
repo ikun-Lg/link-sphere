@@ -13,9 +13,9 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
   final _accountController = TextEditingController();
-  final _passwordController = TextEditingController();
   final _verifyCodeController = TextEditingController();
-  bool _isPasswordLogin = true;
+  final _passwordController = TextEditingController(); // 恢复密码控制器
+  bool _isPasswordRegister = false; // 注册方式切换
   bool _isPhone = false;
   bool _obscurePassword = true;
   int _countdownSeconds = 0;
@@ -25,15 +25,54 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   void dispose() {
     _accountController.dispose();
-    _passwordController.dispose();
+    // _passwordController.dispose(); // 移除密码控制器
     _verifyCodeController.dispose();
     super.dispose();
   }
 
-  void _startCountdown() {
+  Future<void> _sendVerificationCode() async {
+    if (_accountController.text.isEmpty) {
+      _showMessage(_isPhone ? '请输入手机号' : '请输入邮箱', isError: true);
+      return;
+    }
+    if (_isPhone && _accountController.text.length != 11) {
+      _showMessage('请输入11位手机号', isError: true);
+      return;
+    }
+    if (!_isPhone &&
+        !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+            .hasMatch(_accountController.text)) {
+      _showMessage('请输入正确的邮箱格式', isError: true);
+      return;
+    }
+
     setState(() {
-      _countdownSeconds = 60;
+      _isLoading = true; // 开始加载状态，避免重复点击
     });
+
+    try {
+      // 修改为调用新的获取注册验证码接口
+      await _apiService.getRegisterVerificationCode(
+        contactInformation: _accountController.text,
+        type: _isPhone ? 1 : 2, // 1 for phone, 2 for email
+      );
+      _showMessage('验证码已发送');
+      _startCountdown();
+    } catch (e) {
+      _showMessage(e.toString(), isError: true);
+    } finally {
+      setState(() {
+        _isLoading = false; // 结束加载状态
+      });
+    }
+  }
+
+  void _startCountdown() {
+    if (_countdownSeconds == 0) {
+      setState(() {
+        _countdownSeconds = 60;
+      });
+    }
     Future.delayed(const Duration(seconds: 1), () {
       if (_countdownSeconds > 0) {
         setState(() {
@@ -104,42 +143,35 @@ class _RegisterPageState extends State<RegisterPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final success = await _apiService.register(
-        contactInformation: _accountController.text,
-        passwordCode:
-            _isPasswordLogin
-                ? _passwordController.text
-                : _verifyCodeController.text,
-        code: _isPasswordLogin ? 2 : 1,
+  setState(() {
+    _isLoading = true;
+  });
+  try {
+    final success = await _apiService.register(
+      contactInformation: _accountController.text,
+      code: _verifyCodeController.text,
+      type: _isPhone ? '1' : '2',
+    );
+    if (success && mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => LoginPage()),
+        (route) => false,
       );
-
-      if (success) {
-        if (mounted) {
-          _showMessage('注册成功');
-          // 延迟跳转，让用户看到成功提示
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) {
-              Navigator.pop(context); // 返回注册页
-            }
-          });
-        }
-      }
-    } catch (e) {
+      return; // 跳转后立即 return，避免后续 setState
+    }
+  } catch (e) {
+    if (mounted) {
       _showMessage(e.toString(), isError: true);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+    }
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -201,19 +233,19 @@ class _RegisterPageState extends State<RegisterPage> {
                     children: [
                       Expanded(
                         child: GestureDetector(
-                          onTap: () => setState(() => _isPasswordLogin = true),
+                          onTap: () => setState(() => _isPasswordRegister = true),
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
-                              color: _isPasswordLogin ? Theme.of(context).primaryColor : Colors.transparent,
+                              color: _isPasswordRegister ? Theme.of(context).primaryColor : Colors.transparent,
                               borderRadius: BorderRadius.circular(21),
                             ),
                             child: Text(
                               '密码注册',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: _isPasswordLogin ? Colors.white : Colors.black87,
-                                fontWeight: _isPasswordLogin ? FontWeight.bold : FontWeight.normal,
+                                color: _isPasswordRegister ? Colors.white : Colors.black87,
+                                fontWeight: _isPasswordRegister ? FontWeight.bold : FontWeight.normal,
                               ),
                             ),
                           ),
@@ -221,19 +253,19 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                       Expanded(
                         child: GestureDetector(
-                          onTap: () => setState(() => _isPasswordLogin = false),
+                          onTap: () => setState(() => _isPasswordRegister = false),
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
-                              color: !_isPasswordLogin ? Theme.of(context).primaryColor : Colors.transparent,
+                              color: !_isPasswordRegister ? Theme.of(context).primaryColor : Colors.transparent,
                               borderRadius: BorderRadius.circular(21),
                             ),
                             child: Text(
                               '验证码注册',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: !_isPasswordLogin ? Colors.white : Colors.black87,
-                                fontWeight: !_isPasswordLogin ? FontWeight.bold : FontWeight.normal,
+                                color: !_isPasswordRegister ? Colors.white : Colors.black87,
+                                fontWeight: !_isPasswordRegister ? FontWeight.bold : FontWeight.normal,
                               ),
                             ),
                           ),
@@ -243,7 +275,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                 ),
                 const SizedBox(height: 32),
-
                 // 账号输入框
                 Container(
                   decoration: BoxDecoration(
@@ -296,7 +327,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 const SizedBox(height: 16),
 
                 // 密码/验证码输入框
-                if (_isPasswordLogin)
+                if (_isPasswordRegister)
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.grey[100],
@@ -323,15 +354,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
                       obscureText: _obscurePassword,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return '请输入密码';
-                        }
-                        if (value.length < 6) {
-                          return '密码至少6位';
-                        }
-                        return null;
-                      },
+                      enabled: false, // 禁用密码注册输入
                     ),
                   )
                 else
@@ -377,16 +400,9 @@ class _RegisterPageState extends State<RegisterPage> {
                         width: 120,
                         child: ElevatedButton(
                           onPressed:
-                              _countdownSeconds > 0
+                              _isLoading || _countdownSeconds > 0 || _isPasswordRegister // 密码注册时禁用
                                   ? null
-                                  : () {
-                                    if (_isPhone &&
-                                        _accountController.text.length != 11) {
-                                      _showMessage('请输入正确的手机号', isError: true);
-                                      return;
-                                    }
-                                    _startCountdown();
-                                  },
+                                  : _sendVerificationCode,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Theme.of(context).primaryColor,
                             foregroundColor: Colors.white,
@@ -405,12 +421,10 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                     ],
                   ),
-
                 const SizedBox(height: 40),
-
                 // 注册按钮
                 ElevatedButton(
-                  onPressed: _isLoading ? null : _register,
+                  onPressed: _isLoading  ? null : _register, // 密码注册时禁用
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
@@ -433,7 +447,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                           )
                           : const Text(
-                            '注册', // 修改按钮文字
+                            '注册',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,

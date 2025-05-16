@@ -75,21 +75,19 @@ class _CategoryProductsPageState extends State<CategoryProductsPage> {
 
       if (response['code'] == 'SUCCESS_0000' && response['data']?['list'] != null) {
         final List<dynamic> productListJson = response['data']['list'];
-        final List<DiscoverPost> fetchedProducts = productListJson.map((json) {
+        final List<DiscoverPost> fetchedProducts = (response['data']['list'] as List).map((json) {
           // --- 将 API 返回的商品数据映射到 DiscoverPost 模型 ---
           return DiscoverPost(
-            // API 返回的 id 是 int，模型需要 String，进行转换
-            id: json['id'] ?? 0,
+            id: int.tryParse(json['id'] ?? '0') ?? 0,
             title: json['name'] ?? '无标题',
             description: json['description'] ?? '',
             imageUrl: json['mainImage'] ?? 'https://via.placeholder.com/300',
             price: (json['price'] as num?)?.toDouble() ?? 0.0,
-            shopName: '分类好店', // API 暂无店铺名，给个默认值
+            shopName: '分类商品', // 默认店铺名
             sales: (json['sales'] as num?)?.toInt() ?? 0,
             likes: 0, // API 暂无
             comments: 0, // API 暂无
           );
-          // --- 映射结束 ---
         }).toList();
 
         setState(() {

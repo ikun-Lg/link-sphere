@@ -3,8 +3,39 @@ import 'package:image_picker/image_picker.dart'; // <--- 导入 image_picker
 import 'package:link_sphere/models/category_node.dart';
 import '../models/user.dart';
 import 'user_service.dart';
+import 'package:link_sphere/utils/network_utils.dart';
 
 class ApiService {
+  // 上传头像
+  Future<String> uploadAvatar(XFile file) async {
+    final token = await UserService.getToken();
+    if (token == null) {
+      throw '用户未登录';
+    }
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(file.path, filename: file.name),
+      });
+      final response = await _dio.post(
+        '/user/upload/avatar',
+        data: formData,
+        options: Options(
+          headers: {
+            'Authorization': token,
+            'Accept': 'application/json',
+            'Content-Type': 'multipart/form-data',
+          },
+        ),
+      );
+      if (response.statusCode == 200 && response.data['code'] == 'SUCCESS_0000') {
+        return response.data['info']; // 返回图片URL
+      }
+      throw response.data['info'] ?? '上传头像失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
@@ -40,13 +71,51 @@ class ApiService {
   }
   // --- 新增结束 ---
 
+  // --- 新增：获取注册验证码 ---
+  Future<Map<String, dynamic>> getRegisterVerificationCode({
+    required String contactInformation,
+    required int type, // 1: 电话, 2: 邮箱
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/user/authenticate/registerCode', // 更新为注册验证码接口
+        queryParameters: {
+          'contactInformation': contactInformation,
+          'type': type,
+        },
+        options: Options(headers: {'Accept': 'application/json'}),
+      );
+
+      print('Get Register Verification Code Response: ${response.data}');
+
+      if (response.statusCode == 200 &&
+          response.data['code'] == 'SUCCESS_0000') {
+        return response.data;
+      }
+      throw response.data['info'] ?? '获取注册验证码失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+  // --- 新增结束 ---
+
   final Dio _dio = Dio(
     BaseOptions(
       baseUrl: 'http://116.198.239.101:8089/api/v1',
       connectTimeout: const Duration(seconds: 30), // 增加到30秒
       receiveTimeout: const Duration(seconds: 30),
     ),
-  );
+  )..interceptors.add(
+      InterceptorsWrapper(
+        onError: (DioException e, handler) {
+          print('API错误: ${e.message}');
+          if (e.response?.statusCode == 500) {
+            print('服务器内部错误: ${e.response?.data}');
+          }
+          return handler.next(e);
+        },
+      ),
+    );
 
   // --- 新增：验证Token --- 
   Future<bool> validateToken(String token) async {
@@ -104,50 +173,123 @@ class ApiService {
   }
 
   String _handleError(DioException error) {
-    if (error.type == DioExceptionType.connectionTimeout) {
-      return '连接超时';
-    }
-    if (error.type == DioExceptionType.receiveTimeout) {
-      return '接收数据超时';
-    }
-    if (error.response != null) {
-      switch (error.response!.statusCode) {
-        case 400:
-          return '请求参数错误';
-        case 401:
-          return '未授权';
-        case 403:
-          return '访问被拒绝';
-        case 404:
-          return '请求地址不存在';
-        case 500:
-          return '服务器内部错误';
-        default:
-          return '未知错误';
+    print('处理API错误: ${error.type}, message: ${error.message}');
+    print('响应状态码: ${error.response?.statusCode}');
+    print('响应数据: ${error.response?.data}');
+    
+    // 使用通用的错误处理工具
+    return NetworkUtils.handleApiError(error);
+  }
+  
+  // 搜索用户
+  Future<Map<String, dynamic>> searchUsers({
+    required String keywords,
+    int page = 1,
+    int size = 10,
+  }) async {
+    try {
+      final token = await UserService.getToken();
+      // 构建queryParameters，避免传递null
+      final Map<String, dynamic> queryParameters = {
+        'page': page,
+        'size': size,
+      };
+      if (keywords.isNotEmpty) {
+        queryParameters['keywords'] = keywords;
       }
+      final response = await _dio.get(
+        '/user/search',
+        queryParameters: queryParameters,
+        options: Options(
+          headers: token != null ? {'Authorization': token} : {},
+        ),
+      );
+      
+      print('Search Users Response: ${response.data}');
+      
+      if (response.statusCode == 200) {
+        return response.data;
+      }
+      throw response.data['info'] ?? '搜索用户失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
     }
-    return '网络错误';
   }
 
   Future<bool> register({
     required String contactInformation,
-    required String passwordCode,
-    required int code,
+    required String code, // 修改：之前是 passwordCode
+    required String type, // 修改：之前是 int code, 现在是 String type
   }) async {
-    final response = await _dio.post(
-      '/user/authenticate/login',
-      data: {
-        'contactInformation': contactInformation,
-        'passwordCode': passwordCode,
-        'code': code,
-      },
-    );
+    print('Register Request: contactInformation: $contactInformation, code: $code, type: $type');
+    try {
+      final response = await _dio.post(
+        '/user/authenticate/register', // 修改：更新API端点
+        data: {
+          'contactInformation': contactInformation,
+          'code': code, // 修改：参数名和值
+          'type': type, // 修改：参数名和值
+        },
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+          },
+        ),
+      );
 
-    if (response.statusCode == 200) {
-      // 处理注册成功后的逻辑，比如保存token等
-      return true;
+      print('Register Response: ${response.data}');
+
+      if (response.statusCode == 200 && response.data['code'] == 'SUCCESS_0000') {
+        // 注册成功，根据接口定义，data为null，不需要保存用户信息或token
+        return true;
+      }
+      // 如果code不是SUCCESS_0000，则抛出info中的错误信息
+      throw response.data['info'] ?? '注册失败: 未知错误';
+    } on DioException catch (e) {
+      // 处理Dio相关的网络错误等
+      if (e.response != null && e.response!.data != null && e.response!.data['info'] != null) {
+        throw e.response!.data['info'];
+      }
+      throw _handleError(e);
+    } catch (e) {
+      // 处理其他类型的错误，例如上面抛出的字符串错误
+      print('Register error: $e');
+      throw e.toString();
     }
-    throw '注册失败：${response.data['message'] ?? '未知错误'}';
+  }
+
+  // 获取二级评论列表的方法
+  Future<List<dynamic>> getSecondLevelComments({
+    required int parentId,
+    int? lastId,
+    String? token,
+  }) async {
+    try {
+      final options = Options(
+        headers: {
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': token,
+        },
+      );
+
+      final queryParams = <String, dynamic>{};
+      if (lastId != null) {
+        queryParams['lastId'] = lastId;
+      }
+
+      final response = await _dio.get(
+        '/comments/$parentId/reply/list',
+        queryParameters: queryParams,
+        options: options,
+      );
+
+      if (response.statusCode == 200 && response.data['code'] == 'SUCCESS_0000') {
+        return response.data['data'] ?? [];
+      }
+      throw response.data['info'] ?? '获取二级评论失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
   }
 
   // 获取作者自己帖子列表
@@ -625,6 +767,74 @@ class ApiService {
     }
   }
 
+  // 获取最新帖子
+  Future<Map<String, dynamic>> getLatestPosts({
+    required String keywords,
+    int page = 1,
+    int size = 10,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/sale/search_product',
+        queryParameters: {'keywords': keywords, 'page': page, 'size': size},
+        options: Options(headers: {'Accept': 'application/json'}),
+      );
+      if (response.statusCode == 200) {
+        return response.data;
+      }
+      throw response.data['info'] ?? '获取最新帖子失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // 获取推荐帖子
+  Future<Map<String, dynamic>> getRecommendedPosts({
+    required String keywords,
+    int topN = 10,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/recommend/search/content',
+        queryParameters: {'keywords': keywords, 'topN': topN},
+        options: Options(headers: {'Accept': 'application/json'}),
+      );
+      if (response.statusCode == 200) {
+        return response.data;
+      }
+      throw response.data['info'] ?? '获取推荐帖子失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // 搜索商品
+  Future<Map<String, dynamic>> searchProducts({
+    required String keywords,
+    int page = 1,
+    int size = 10,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/sale/search_product',
+        queryParameters: {
+          'keywords': keywords,
+          'page': page,
+          'size': size,
+        },
+        options: Options(
+          headers: {'Accept': 'application/json'},
+        ),
+      );
+      if (response.statusCode == 200) {
+        return response.data;
+      }
+      throw response.data['info'] ?? '搜索商品失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   // --- 新增：获取推荐商品列表 ---
   Future<Map<String, dynamic>> getRecommendedProducts() async {
     // 尝试获取 token
@@ -751,6 +961,96 @@ class ApiService {
   }
   // --- 新增结束 ---
 
+  // --- 新增：发布评论 ---
+  Future<Map<String, dynamic>> publishComment({
+    required int entityId,
+    required String entityType,
+    required String content,
+    String? imageUrl,
+  }) async {
+    final token = await UserService.getToken();
+    if (token == null) {
+      throw '用户未登录，无法发布评论';
+    }
+
+    try {
+      final response = await _dio.post(
+        '/comments/publish',
+        data: {
+          'entityId': entityId,
+          'entityType': entityType,
+          'content': content,
+          'imageUrl': imageUrl ?? '',
+        },
+        options: Options(
+          headers: {
+            'Authorization': token,
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      print('Publish Comment Response: ${response.data}');
+
+      if (response.statusCode == 200 &&
+          response.data['code'] == 'SUCCESS_0000') {
+        return response.data;
+      }
+      throw response.data['info'] ?? '发布评论失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    } catch (e) {
+      print('Error publishing comment: $e');
+      throw '发布评论时发生未知错误';
+    }
+  }
+  // --- 新增结束 ---
+
+  // --- 新增：回复评论 ---
+  Future<Map<String, dynamic>> publishReply({
+    required int replyCommentId,
+    required dynamic parentId,
+    required String content,
+    String? imageUrl,
+  }) async {
+    final token = await UserService.getToken();
+    if (token == null) {
+      throw '用户未登录，无法回复评论';
+    }
+
+    try {
+      final response = await _dio.post(
+        '/comments/publish/reply',
+        data: {
+          'replyCommentId': replyCommentId,
+          'parentId': parentId,
+          'content': content,
+          'imageUrl': imageUrl ?? '',
+        },
+        options: Options(
+          headers: {
+            'Authorization': token,
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      print('Publish Reply Response: ${response.data}');
+
+      if (response.statusCode == 200 &&
+          response.data['code'] == 'SUCCESS_0000') {
+        return response.data;
+      }
+      throw response.data['info'] ?? '回复评论失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    } catch (e) {
+      print('Error publishing reply: $e');
+      throw '回复评论时发生未知错误';
+    }
+  }
+  // --- 新增结束 ---
+
   // --- 新增：删除帖子 ---
   Future<Map<String, dynamic>> deletePost(String postId) async {
     // 尝试获取 token
@@ -784,6 +1084,88 @@ class ApiService {
     } on DioException catch (e) {
       // 处理 Dio 异常
       throw _handleError(e);
+    }
+  }
+  // --- 新增结束 ---
+
+  // --- 新增：点赞评论 ---
+  Future<Map<String, dynamic>> likeComment({
+    required int commentId,
+    int? parentId,
+  }) async {
+    final token = await UserService.getToken();
+    if (token == null) {
+      throw '用户未登录，无法点赞评论';
+    }
+
+    try {
+      final response = await _dio.post(
+        '/comments/like',
+        data: {
+          'commentId': commentId,
+          'parentId': parentId,
+        },
+        options: Options(
+          headers: {
+            'Authorization': token,
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      print('Like Comment Response: ${response.data}');
+
+      if (response.statusCode == 200 &&
+          response.data['code'] == 'SUCCESS_0000') {
+        return response.data;
+      }
+      throw response.data['info'] ?? '点赞评论失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    } catch (e) {
+      print('Error liking comment: $e');
+      throw '点赞评论时发生未知错误';
+    }
+  }
+  // --- 新增结束 ---
+
+  // --- 新增：取消点赞评论 ---
+  Future<Map<String, dynamic>> unlikeComment({
+    required int commentId,
+    int? parentId,
+  }) async {
+    final token = await UserService.getToken();
+    if (token == null) {
+      throw '用户未登录，无法取消点赞评论';
+    }
+
+    try {
+      final response = await _dio.post(
+        '/comments/unlike',
+        data: {
+          'commentId': commentId,
+          'parentId': parentId,
+        },
+        options: Options(
+          headers: {
+            'Authorization': token,
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      print('Unlike Comment Response: ${response.data}');
+
+      if (response.statusCode == 200 &&
+          response.data['code'] == 'SUCCESS_0000') {
+        return response.data;
+      }
+      throw response.data['info'] ?? '取消点赞评论失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    } catch (e) {
+      print('Error unliking comment: $e');
+      throw '取消点赞评论时发生未知错误';
     }
   }
   // --- 新增结束 ---
@@ -922,6 +1304,30 @@ class ApiService {
   // --- 上传文件结束 ---
 
     // 获取帖子详情页的推荐帖子
+  // 获取帖子相关商品推荐
+  Future<Map<String, dynamic>> getProductRecommendByPost({
+    required String postsId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/tagging/products/posts/$postsId',
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return response.data;
+      }
+      throw response.data['info'] ?? '获取商品推荐失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // 原有的帖子推荐方法
   Future<Map<String, dynamic>> getRecommendContentForPost({
     required String postAuthorId,
     int topN = 6,
@@ -1336,6 +1742,39 @@ class ApiService {
       throw _handleError(e);
     }
   }
-}
 
+  // --- 新增：获取评论列表 ---
+  Future<Map<String, dynamic>> getCommentList({
+    required String entityType,
+    required int entityId,
+    int? page,
+    int? size,
+  }) async {
+    try {
+      final token = await UserService.getToken();
+      final options = token != null
+          ? Options(headers: {'Authorization': token})
+          : Options();
+
+      final response = await _dio.get(
+        '/comments/$entityType/$entityId/list',
+        queryParameters: {
+          if (page != null) 'page': page,
+          if (size != null) 'size': size,
+        },
+        options: options,
+      );
+
+      print('Get Comment List Response: ${response.data}');
+
+      if (response.statusCode == 200 && response.data['code'] == 'SUCCESS_0000') {
+        return response.data;
+      }
+      throw response.data['info'] ?? '获取评论列表失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+  // --- 新增结束 ---
+}
 
