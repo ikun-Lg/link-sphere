@@ -64,6 +64,9 @@ class _PostDetailPageState extends State<PostDetailPage> {
   XFile? _replyImageFile;
   bool _isUploadingReplyImage = false;
 
+  // 新增：用于滚动到评论区的 GlobalKey
+  final GlobalKey _commentsSectionKey = GlobalKey();
+
   // 选择并上传评论图片
   Future<void> _pickCommentImage() async {
     final ImagePicker picker = ImagePicker();
@@ -387,12 +390,12 @@ class _PostDetailPageState extends State<PostDetailPage> {
           }
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(comment['like'] ? '取消点赞成功' : '点赞成功'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   SnackBar(
+        //     content: Text(comment['like'] ? '取消点赞成功' : '点赞成功'),
+        //     duration: const Duration(seconds: 2),
+        //   ),
+        // );
       } else {
         throw response['info'] ?? '点赞操作失败';
       }
@@ -878,7 +881,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(isLiked ? '点赞成功' : '取消点赞成功'),
+              content: Text(!originalLikedState ? '取消点赞成功' : '点赞成功'),
               duration: const Duration(seconds: 1),
             ),
           );
@@ -889,7 +892,9 @@ class _PostDetailPageState extends State<PostDetailPage> {
           isLiked = originalLikedState;
           likesCount = originalLikesCount;
         });
-        throw response['info'] ?? (isLiked ? '点赞失败' : '取消点赞失败');
+        // 修改点：错误信息基于操作意图
+        final String defaultErrorMessage = originalLikedState ? '取消点赞失败' : '点赞失败';
+        throw response['info'] ?? defaultErrorMessage;
       }
     } catch (e) {
       // 捕获到异常，回滚 UI
@@ -931,6 +936,19 @@ class _PostDetailPageState extends State<PostDetailPage> {
           content: Text('分享链接已复制到剪贴板！'),
           duration: Duration(seconds: 2),
         ),
+      );
+    }
+  }
+  // ---- 新增结束 ----
+
+  // ---- 新增：滚动到评论区的方法 ----
+  void _scrollToComments() {
+    final context = _commentsSectionKey.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
       );
     }
   }
@@ -1437,6 +1455,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
+                key: _commentsSectionKey, // <-- 将 GlobalKey 赋予评论区容器
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
@@ -1729,7 +1748,9 @@ class _PostDetailPageState extends State<PostDetailPage> {
                 isLikeLoading: isLikeLoading,
                 likesCount: likesCount,
                 onLikePressed: _handleLike,
-                onSharePressed: _handleSharePost, // <-- 新增分享回调
+                onSharePressed: _handleSharePost, 
+                onCommentIconPressed: _scrollToComments, 
+                actualCommentsCount: comments.length,
               ),
     );
   }
