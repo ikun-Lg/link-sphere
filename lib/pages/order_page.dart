@@ -20,7 +20,7 @@ class _OrderPageState extends State<OrderPage> {
   final ScrollController _scrollController = ScrollController();
 
   // 存储每个订单的倒计时定时器
-  Map<String, Timer?> _orderTimers = {};
+  final Map<String, Timer?> _orderTimers = {};
 
   @override
   void initState() {
@@ -217,6 +217,7 @@ class _OrderPageState extends State<OrderPage> {
                 _buildFilterChip('待评价', 4),
                 _buildFilterChip('退款中', 5),
                 _buildFilterChip('已退款', 6),
+                _buildFilterChip('系统关单', 3),
               ],
             ),
           ),

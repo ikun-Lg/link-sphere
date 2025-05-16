@@ -769,15 +769,25 @@ class ApiService {
 
   // 获取最新帖子
   Future<Map<String, dynamic>> getLatestPosts({
-    required String keywords,
+    String? keywords,
     int page = 1,
     int size = 10,
   }) async {
+    final token = await UserService.getToken();
     try {
       final response = await _dio.get(
-        '/sale/search_product',
-        queryParameters: {'keywords': keywords, 'page': page, 'size': size},
-        options: Options(headers: {'Accept': 'application/json'}),
+        '/posts/search',
+        queryParameters: {
+          'keyword': keywords,
+          'page': page,
+          'size': size
+        },
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            if (token != null) 'Authorization': token,
+          }
+        ),
       );
       if (response.statusCode == 200) {
         return response.data;
@@ -790,14 +800,23 @@ class ApiService {
 
   // 获取推荐帖子
   Future<Map<String, dynamic>> getRecommendedPosts({
-    required String keywords,
+    String? keywords,
     int topN = 10,
   }) async {
+    final token = await UserService.getToken();
     try {
       final response = await _dio.get(
         '/recommend/search/content',
-        queryParameters: {'keywords': keywords, 'topN': topN},
-        options: Options(headers: {'Accept': 'application/json'}),
+        queryParameters: {
+          'keywords': keywords,
+          'topN': topN
+        },
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            if (token != null) 'Authorization': token,
+          }
+        ),
       );
       if (response.statusCode == 200) {
         return response.data;
@@ -826,12 +845,23 @@ class ApiService {
           headers: {'Accept': 'application/json'},
         ),
       );
-      if (response.statusCode == 200) {
-        return response.data;
+      // 首先检查响应数据是否是 Map
+      if (response.data is Map) {
+        final responseData = response.data as Map<String, dynamic>;
+        // 检查业务码是否成功
+        if (response.statusCode == 200 && responseData['code'] == 'SUCCESS_0000') {
+          return responseData; // 成功，返回整个响应体
+        } else {
+          // 业务失败或其他错误码，抛出 info
+          throw responseData['info'] ?? '搜索商品失败: 未知业务错误';
+        }
       }
-      throw response.data['info'] ?? '搜索商品失败';
+      // 如果响应数据不是 Map，或者状态码不是200 (且未被DioException捕获)
+      throw '搜索商品失败: 响应格式不正确或网络错误 ${response.statusCode}';
     } on DioException catch (e) {
-      throw _handleError(e);
+      throw _handleError(e); // DioException 由 _handleError 处理
+    } catch (e) { // 捕获上面抛出的字符串错误
+      rethrow; // 重新抛出，以便调用者可以捕获
     }
   }
 

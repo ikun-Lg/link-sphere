@@ -110,7 +110,16 @@ class _CartPageState extends State<CartPage> {
   // 新增：切换商品选中状态
   void _toggleItemSelection(int index) {
     setState(() {
-      _selectedItems[index] = !_selectedItems[index];
+      bool isCurrentlySelected = _selectedItems[index];
+      // 先将所有项目取消选中
+      for (int i = 0; i < _selectedItems.length; i++) {
+        _selectedItems[i] = false;
+      }
+      // 如果之前未选中该项目，则选中它
+      // (如果之前已选中，则在上面的循环中已被取消选中，实现了点击已选中的项即取消选中的效果)
+      if (!isCurrentlySelected) {
+        _selectedItems[index] = true;
+      }
     });
   }
 
@@ -165,32 +174,63 @@ class _CartPageState extends State<CartPage> {
         try {
           final response = await _apiService.createPayOrder(item.productId);
           if (response['code'] == 'SUCCESS_0000') {
-            print('商品${item.productId}支付成功');
-            
-            // 删除支付成功的商品
-            final index = remainingItems.indexOf(item);
-            if (index != -1) {
-              remainingItems.removeAt(index);
-              remainingSelectedItems.removeAt(index);
+            print('商品${item.productId}支付成功，准备显示二维码');
+            final String? qrCodeUrl = response['data'] as String?;
+
+            if (qrCodeUrl != null && qrCodeUrl.isNotEmpty) {
+              // 显示二维码弹窗并等待其关闭
+              await _showQrCodeDialog(context, qrCodeUrl, item.productName);
+            } else {
+              print('商品${item.productId}支付成功，但未收到有效的二维码URL。');
+              // 可以选择向用户显示一个不同的消息，或者将此视为一个失败场景
+              failedProducts.add('商品${item.productName}: 支付成功但二维码获取失败');
+              // 跳过此商品的移除，因为它可能未完全处理
+              continue; // 继续下一个商品
             }
+            
+            // 支付成功且二维码显示(或尝试显示)后，标记商品以便后续移除
+            final indexInOriginalCart = _cartItems.indexWhere((cartItem) => cartItem.id == item.id);
+            if (indexInOriginalCart != -1) {
+                 // 我们将在循环结束后根据成功支付的ID列表来更新UI
+            } else {
+                 // 理论上不应该发生，因为item来自selectedItems，而selectedItems源于_cartItems
+            }
+
           } else {
             print('商品${item.productId}支付失败: ${response['info']}');
-            failedProducts.add('商品${item.productId}: ${response['info'] ?? '未知错误'}');
+            failedProducts.add('商品${item.productName}: ${response['info'] ?? '未知错误'}');
           }
         } catch (itemError) {
           print('商品${item.productId}支付出错: $itemError');
-          failedProducts.add('商品${item.productId}: $itemError');
+          failedProducts.add('商品${item.productName}: $itemError');
         }
       }
 
-      // 更新状态
+      // 循环结束后，根据处理结果更新UI
+      // 筛选出未成功支付或未显示二维码的商品保留在购物车中
+      List<CartItem> updatedCartItems = [];
+      List<bool> updatedSelectedItemsStatus = [];
+
+      for (int i = 0; i < _cartItems.length; i++) {
+        final currentCartItem = _cartItems[i];
+        bool wasSuccessfullyPaidAndQrShown = selectedItems.any((paidItem) => 
+            paidItem.id == currentCartItem.id && 
+            !failedProducts.any((failedMsg) => failedMsg.startsWith('商品${paidItem.productName}:'))
+        );
+
+        if (!wasSuccessfullyPaidAndQrShown) {
+          updatedCartItems.add(currentCartItem);
+          updatedSelectedItemsStatus.add(_selectedItems[i]); // 保留其原始选中状态，或设为false
+        }
+      }
+
       setState(() {
-        _cartItems = remainingItems;
-        _selectedItems = remainingSelectedItems;
+        _cartItems = updatedCartItems;
+        _selectedItems = updatedSelectedItemsStatus;
         _isLoading = false;
       });
 
-      if (failedProducts.isEmpty) {
+      if (failedProducts.isEmpty && selectedItems.isNotEmpty) {
         // 全部支付成功
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('选中商品支付成功')),
@@ -230,6 +270,57 @@ class _CartPageState extends State<CartPage> {
     }
   }
   // --- 下单结束 ---
+
+  // --- 新增：显示二维码弹窗 ---
+  Future<void> _showQrCodeDialog(BuildContext context, String qrCodeUrl, String productName) async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // 用户必须点击按钮关闭
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('商品支付'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text('请扫描下方二维码完成对商品 "$productName" 的支付：'),
+                const SizedBox(height: 16),
+                Center(
+                  child: Image.network(
+                    qrCodeUrl,
+                    height: 200,
+                    width: 200,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                              : null,
+                        ),
+                      );
+                    },
+                    errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
+                      return const Center(child: Text('二维码加载失败'));
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('完成支付'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+  // --- 新增结束 ---
 
   @override
   Widget build(BuildContext context) {
@@ -367,16 +458,14 @@ class _CartPageState extends State<CartPage> {
                   color: Colors.grey[600],
                 ),
               ),
-              // --- 修改：使用计算后的总价 ---
               Text(
-                '¥${_calculateTotalPrice().toStringAsFixed(2)}',
+                '¥${_calculateSelectedTotalPrice().toStringAsFixed(2)}', // 修改为显示选中商品的总价
                 style: TextStyle(
                   fontSize: 20,
                   color: Theme.of(context).primaryColor,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              // --- 修改结束 ---
               const SizedBox(width: 16),
               // 结算按钮
               Expanded(
