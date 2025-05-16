@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:link_sphere/pages/cart_page.dart';
+import 'package:link_sphere/services/noti_service.dart';
 import 'package:link_sphere/services/user_service.dart';
 import 'pages/home_page.dart';
 import 'pages/discover_page.dart';
@@ -16,7 +17,10 @@ import 'package:link_sphere/pages/post_detail_page.dart'; // For navigation
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
+
+
   WidgetsFlutterBinding.ensureInitialized();
+  NotiService().initNotification();
   await UserService.init();
   
   // 添加全局错误处理

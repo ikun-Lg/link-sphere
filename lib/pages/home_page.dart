@@ -7,6 +7,7 @@ import 'package:link_sphere/pages/post_detail_page.dart';
 import 'package:link_sphere/pages/search_result_page.dart';
 import 'package:link_sphere/pages/order_page.dart';
 import 'package:link_sphere/services/api_service.dart';
+import 'package:link_sphere/services/noti_service.dart';
 import 'package:link_sphere/services/user_service.dart';
 import 'login_page.dart'; // <--- 新增：导入登录页面
 
@@ -36,6 +37,10 @@ class _HomePageState extends State<HomePage>
   @override
   void initState() {
     super.initState();
+    NotiService().showDailyNotification(
+      title: '测试通知',
+      body: '测试通知内容',
+    );
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) {
