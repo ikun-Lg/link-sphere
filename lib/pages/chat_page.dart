@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:link_sphere/services/user_service.dart';
-import 'package:link_sphere/services/chat_service.dart';
+import 'package:link_sphere/services/websocket_service.dart';
 
 class ChatPage extends StatefulWidget {
   final String username;
@@ -24,12 +24,29 @@ class _ChatPageState extends State<ChatPage> {
   List<Map<String, dynamic>> _messages = [];
   String? _myAvatar;
   static const String defaultAvatar = 'https://tvpic.gtimg.cn/head/c2010ebc0c8b6d8521373ffeced635c8da39a3ee5e6b4b0d3255bfef95601890afd80709/361?imageView2/2/w/100';
+  final _webSocketService = WebSocketService();
 
   @override
   void initState() {
     super.initState();
     _loadMyAvatar();
     _loadLocalMessages();
+    _setupMessageListener();
+  }
+
+  void _setupMessageListener() {
+    _webSocketService.messages.listen((message) {
+      if (message['senderId'] == widget.friendId) {
+        setState(() {
+          _messages.add({
+            'isMe': false,
+            'message': message['content'],
+            'time': '现在',
+          });
+        });
+        _scrollToBottom();
+      }
+    });
   }
 
   Future<void> _loadMyAvatar() async {
@@ -40,39 +57,49 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _loadLocalMessages() async {
-    final msgs = await ChatService().getLocalMessages(widget.friendId);
+    final msgs = await _webSocketService.getLocalMessages(widget.friendId);
     setState(() {
-      _messages = msgs;
+      _messages = msgs.map((msg) => {
+        'isMe': msg['senderId'] == _webSocketService.getCurrentUserId(),
+        'message': msg['content'],
+        'time': '现在',
+      }).toList();
     });
-    // 自动滚动到底部
-    await Future.delayed(const Duration(milliseconds: 100));
-    if (_scrollController.hasClients) {
-      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-    }
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   void _sendMessage() async {
     if (_controller.text.isNotEmpty) {
-      final msg = {
-        'isMe': true,
-        'message': _controller.text,
-        'time': '现在',
-      };
-      setState(() {
-        _messages.add(msg);
-      });
-      await ChatService().saveLocalMessage(widget.friendId, msg);
+      final content = _controller.text;
       _controller.clear();
-      // 滚动到底部
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+
+      try {
+        await _webSocketService.sendMessage(widget.friendId, content);
+        setState(() {
+          _messages.add({
+            'isMe': true,
+            'message': content,
+            'time': '现在',
+          });
+        });
+        _scrollToBottom();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('发送消息失败: $e')),
+        );
+      }
     }
   }
 
@@ -108,13 +135,19 @@ class _ChatPageState extends State<ChatPage> {
                     color: Colors.black,
                   ),
                 ),
-                Text(
-                  '在线',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.green[400],
-                  ),
+                StreamBuilder<String>(
+                  stream: _webSocketService.connectionStatus,
+                  builder: (context, snapshot) {
+                    final status = snapshot.data ?? '离线';
+                    return Text(
+                      status,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: status.contains('已连接') ? Colors.green[400] : Colors.grey[400],
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -250,16 +283,10 @@ class _ChatPageState extends State<ChatPage> {
                           fontWeight: FontWeight.normal,
                         ),
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 12),
                       ),
                       onSubmitted: (_) => _sendMessage(),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.image_outlined, color: Colors.black54),
-                  onPressed: () {},
                 ),
                 IconButton(
                   icon: const Icon(Icons.send, color: Colors.black54),
@@ -271,5 +298,12 @@ class _ChatPageState extends State<ChatPage> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 }

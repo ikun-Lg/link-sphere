@@ -55,7 +55,7 @@ const messages = reactive([])
 // STOMP客户端实例
 let stompClient = null
 
-const authToken = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIiwiY29udGFjdEluZm9ybWF0aW9uIjoiMTg3MjI4NjQ1NTIiLCJleHAiOjE3NDc0OTM2OTQsInVzZXJJZCI6MSwiaWF0IjoxNzQ3NDA3Mjk0LCJqdGkiOiJhMWNhYmU1MS1kOGRlLTQ4NmUtODI3YS05NmM0MTc1MTBhNzQifQ.QdV_vV4w86Tde29YF8JfnFJzNCNl5WH0D-_rnY0eOWQ'
+const authToken = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIiwiY29udGFjdEluZm9ybWF0aW9uIjoiMTg3MjI4NjQ1NTIiLCJleHAiOjE3NDc0OTQzOTYsInVzZXJJZCI6MSwiaWF0IjoxNzQ3NDA3OTk2LCJqdGkiOiI3NjBhNmQwMi03ZDNiLTQ3ODMtYTMzNC1jMDg5MjI5MWU4NGYifQ.9T_tRtcBgFiopLkxhgU1DrWTK_qqTd_i7qf36LVL__0'
 
 let headers = {
   Authorization: `Bearer ${authToken}`

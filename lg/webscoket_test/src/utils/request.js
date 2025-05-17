@@ -10,7 +10,7 @@ export const CONTENT_TYPE = {
     jsonData: 'application/json'
 }
 
-export const baseUrl = "http://116.198.239.101:8089/api/v1"
+export const baseUrl = "https://socialite.ljq1024.cc/api/v1"
 
 const errorResult = {
     code: 'A0001',

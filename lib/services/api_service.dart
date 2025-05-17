@@ -101,7 +101,7 @@ class ApiService {
 
   final Dio _dio = Dio(
     BaseOptions(
-      baseUrl: 'http://116.198.239.101:8089/api/v1',
+      baseUrl: 'https://socialite.ljq1024.cc/api/v1',
       connectTimeout: const Duration(seconds: 30), // 增加到30秒
       receiveTimeout: const Duration(seconds: 30),
     ),
@@ -1835,6 +1835,39 @@ class ApiService {
         }
       }
       throw response.data['info'] ?? '获取好友列表失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // 获取历史消息
+  Future<List<Map<String, dynamic>>> getHistoryMessages() async {
+    final token = await UserService.getToken();
+    if (token == null) {
+      throw '用户未登录，无法获取历史消息';
+    }
+
+    try {
+      final response = await _dio.get(
+        '/chat/history',
+        options: Options(
+          headers: {
+            'Authorization': token,
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      print('Get History Messages Response: ${response.data}');
+
+      if (response.statusCode == 200 && response.data['code'] == 'SUCCESS_0000') {
+        final data = response.data['data'];
+        if (data is List) {
+          return List<Map<String, dynamic>>.from(data);
+        }
+        return [];
+      }
+      throw response.data['info'] ?? '获取历史消息失败';
     } on DioException catch (e) {
       throw _handleError(e);
     }

@@ -12,6 +12,7 @@ import 'pages/login_page.dart'; // <--- 新增：导入登录页面
 import 'services/api_service.dart'; // <--- 新增：导入 ApiService
 import 'package:flutter/services.dart'; // For Clipboard
 import 'package:link_sphere/pages/post_detail_page.dart'; // For navigation
+import 'package:link_sphere/services/websocket_service.dart'; // 更新导入
 
 // GlobalKey for NavigatorState
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -20,6 +21,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotiService.initNotification();
   await UserService.init();
+  // 新增：初始化并连接聊天服务
+  final user = await UserService.getUser();
+  final token = await UserService.getToken();
+  if (user != null && token != null) {
+    WebSocketService().connect(user.id.toString(), token, ApiService().dio.options.baseUrl);
+  }
   
   // 添加全局错误处理
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -29,7 +36,6 @@ void main() async {
   };
 
   String initialRoute = '/login'; // 默认为登录页
-  final token = await UserService.getToken();
   if (token != null && token.isNotEmpty) {
     final apiService = ApiService();
     final isValid = await apiService.validateToken(token);
@@ -55,6 +61,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkClipboardForSharedPost(); // Check on initial start
+    // 新增：监听聊天新消息，收到时本地通知
+    WebSocketService().messages.listen((msg) {
+      // 这里只做简单通知，实际可根据业务自定义内容
+      NotiService.showDailyNotification(
+        title: '新消息',
+        body: msg['content'] ?? '你收到了一条新消息',
+      );
+    });
   }
 
   @override
