@@ -1370,10 +1370,12 @@ class _PostDetailPageState extends State<PostDetailPage> {
                           itemCount: recommendProducts.length,
                           itemBuilder: (context, index) {
                             final product = recommendProducts[index];
-                            final images =
-                                product['images']?.toString().split(',') ?? [];
-                            final firstImage =
-                                images.isNotEmpty ? images[0].trim() : '';
+                            // 优先用mainImage字段
+                            final firstImage = (product['mainImage'] != null && (product['mainImage'] as String).isNotEmpty)
+                                ? product['mainImage']
+                                : ((product['images']?.toString().split(',').isNotEmpty ?? false)
+                                    ? product['images']?.toString().split(',')[0].trim()
+                                    : '');
 
                             return GestureDetector(
                               onTap: () {
@@ -1416,7 +1418,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            product['title'] ?? '',
+                                            product['name'] ?? product['title'] ?? '',
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(

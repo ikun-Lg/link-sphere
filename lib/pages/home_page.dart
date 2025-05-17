@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
@@ -34,12 +35,22 @@ class _HomePageState extends State<HomePage>
   String _username = '';
   String _avatarUrl = '';
 
+  // Add StreamSubscription for notifications
+  StreamSubscription<String?>? _notificationSubscription;
+
   @override
   void initState() {
     super.initState();
-    NotiService().showDailyNotification(
-      title: '测试通知',
-      body: '测试通知内容',
+    // Call showDailyNotification with a payload
+    NotiService.showDailyNotification(
+      title: '每日精选',
+      body: '来看看今天有什么新鲜事！点击查看购物车。',
+      payload: 'open_cart', // Example payload
+    );
+       NotiService.showDailyNotification(
+      title: '每日精选',
+      body: '来看看今天有什么新鲜事！',
+      payload: 'open_home', // Example payload
     );
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
@@ -56,6 +67,35 @@ class _HomePageState extends State<HomePage>
     
     // 加载用户信息
     _loadUserInfo();
+
+    // Listen to notification stream
+    _notificationSubscription = NotiService.selectNotificationStream.stream.listen((String? payload) {
+      if (payload != null && payload.isNotEmpty) {
+        debugPrint('HomePage: Received notification payload: $payload');
+        if (payload == 'open_cart') {
+          if (mounted) { // Ensure the widget is still in the tree
+            Navigator.push(context, MaterialPageRoute(builder: (context) => CartPage()));
+          }
+        } else if (payload == 'open_orders') {
+            if (mounted) { // Ensure the widget is still in the tree
+               Navigator.push(context, MaterialPageRoute(builder: (context) => const OrderPage()));
+            }
+        } else if (payload == 'open_home') {
+            if (mounted) { // Ensure the widget is still in the tree
+               // You are already in the HomePage's context (this listener is in _HomePageState).
+               // Pushing another HomePage instance here will cover the existing one and its BottomNavigationBar.
+               debugPrint("Notification action: 'open_home'. Current context is HomePage. No new HomePage pushed.");
+               // If you want to refresh the home page data, you can call your fetch method:
+               // _fetchPosts(); 
+               // If HomePage could have internal navigation (e.g., detail pages pushed on top of it from within the tab),
+               // and you want to return to the base of HomePage, you might use:
+               // Navigator.of(context).popUntil((route) => route.isFirst);
+            }
+        }
+        // Add more conditions for other payloads as needed
+        // e.g., if (payload == 'open_product_123') { ... }
+      }
+    });
   }
   
   // 添加加载用户信息的方法
@@ -73,6 +113,7 @@ class _HomePageState extends State<HomePage>
   void dispose() {
     _tabController.dispose();
     _scrollController.dispose();
+    _notificationSubscription?.cancel(); // Cancel the subscription
     super.dispose();
   }
 

@@ -1,13 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotiService {
-  final notificationsPlugin = FlutterLocalNotificationsPlugin();
+  static final FlutterLocalNotificationsPlugin _notificationsPlugin =
+      FlutterLocalNotificationsPlugin();
 
-  final bool _isInitialized = false;
+  static bool _isInitialized = false;
 
-  bool get isInitialized => _isInitialized;
+  static bool get isInitialized => _isInitialized;
 
-  Future<void> initNotification() async {
+  static final StreamController<String?> selectNotificationStream =
+      StreamController<String?>.broadcast();
+
+  static Future<void> initNotification() async {
     if (_isInitialized) return;
 
     const initSettingsAndroid = AndroidInitializationSettings(
@@ -25,10 +31,16 @@ class NotiService {
       iOS: initSettingsIOS,
     );
 
-    await notificationsPlugin.initialize(initSettings);
+    await _notificationsPlugin.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse notificationResponse) async {
+        selectNotificationStream.add(notificationResponse.payload);
+      },
+    );
+    _isInitialized = true;
   }
 
-  NotificationDetails notificationDetails() {
+  static NotificationDetails _notificationDetails() {
     return const NotificationDetails(
       android: AndroidNotificationDetails(
         'daily_channel_id',
@@ -41,16 +53,26 @@ class NotiService {
     );
   }
 
-  Future<void> showDailyNotification({
+  static Future<void> showDailyNotification({
     int id = 0,
     String? title,
     String? body,
+    String? payload,
   }) async {
-    await notificationsPlugin.show(
+    if (!_isInitialized) {
+      print("NotiService not initialized before showing notification");
+      return;
+    }
+    await _notificationsPlugin.show(
       id,
       title,
       body,
-      const NotificationDetails(),
+      _notificationDetails(),
+      payload: payload,
     );
+  }
+
+  static void dispose() {
+    selectNotificationStream.close();
   }
 }

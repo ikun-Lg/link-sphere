@@ -117,6 +117,9 @@ class ApiService {
       ),
     );
 
+  // 新增：对外暴露dio实例
+  Dio get dio => _dio;
+
   // --- 新增：验证Token --- 
   Future<bool> validateToken(String token) async {
     try {
@@ -1806,5 +1809,35 @@ class ApiService {
     }
   }
   // --- 新增结束 ---
+
+  // 获取好友列表
+  Future<List<Map<String, dynamic>>> getFriends() async {
+    final token = await UserService.getToken();
+    if (token == null) {
+      throw '用户未登录，无法获取好友列表';
+    }
+    try {
+      final response = await _dio.get(
+        '/user/friends',
+        options: Options(
+          headers: {
+            'Authorization': token,
+            'Accept': 'application/json',
+          },
+        ),
+      );
+      if (response.statusCode == 200 && response.data['code'] == 'SUCCESS_0000') {
+        final data = response.data['data'];
+        if (data is List) {
+          return List<Map<String, dynamic>>.from(data);
+        } else {
+          return [];
+        }
+      }
+      throw response.data['info'] ?? '获取好友列表失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
 }
 

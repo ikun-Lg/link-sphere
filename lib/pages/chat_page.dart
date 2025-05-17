@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:link_sphere/services/user_service.dart';
+import 'package:link_sphere/services/chat_service.dart';
 
 class ChatPage extends StatefulWidget {
   final String username;
   final String avatar;
+  final String friendId;
 
   const ChatPage({
     super.key,
     required this.username,
     required this.avatar,
+    required this.friendId,
   });
 
   @override
@@ -17,63 +21,80 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<Map<String, dynamic>> _messages = [];
+  List<Map<String, dynamic>> _messages = [];
+  String? _myAvatar;
+  static const String defaultAvatar = 'https://tvpic.gtimg.cn/head/c2010ebc0c8b6d8521373ffeced635c8da39a3ee5e6b4b0d3255bfef95601890afd80709/361?imageView2/2/w/100';
 
   @override
   void initState() {
     super.initState();
-    _messages.addAll([
-      {
-        'isMe': false,
-        'message': '你好啊！',
-        'time': '09:30',
-      },
-      {
-        'isMe': true,
-        'message': '你好！最近怎么样？',
-        'time': '09:31',
-      },
-    ]);
+    _loadMyAvatar();
+    _loadLocalMessages();
   }
 
-  void _sendMessage() {
+  Future<void> _loadMyAvatar() async {
+    final user = await UserService.getUser();
+    setState(() {
+      _myAvatar = (user != null && user.avatarUrl.isNotEmpty) ? user.avatarUrl : defaultAvatar;
+    });
+  }
+
+  Future<void> _loadLocalMessages() async {
+    final msgs = await ChatService().getLocalMessages(widget.friendId);
+    setState(() {
+      _messages = msgs;
+    });
+    // 自动滚动到底部
+    await Future.delayed(const Duration(milliseconds: 100));
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    }
+  }
+
+  void _sendMessage() async {
     if (_controller.text.isNotEmpty) {
+      final msg = {
+        'isMe': true,
+        'message': _controller.text,
+        'time': '现在',
+      };
       setState(() {
-        _messages.add({
-          'isMe': true,
-          'message': _controller.text,
-          'time': '现在',
-        });
+        _messages.add(msg);
       });
+      await ChatService().saveLocalMessage(widget.friendId, msg);
       _controller.clear();
       // 滚动到底部
       Future.delayed(const Duration(milliseconds: 100), () {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
       });
     }
   }
 
+  String get _otherAvatar => (widget.avatar.isEmpty) ? defaultAvatar : widget.avatar;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1F1F1F),
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2C2C2C),
+        backgroundColor: Colors.white,
         elevation: 0.5,
         titleSpacing: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white70),
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
         title: Row(
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundImage: NetworkImage(widget.avatar),
+              backgroundImage: NetworkImage(_otherAvatar),
             ),
             const SizedBox(width: 12),
             Column(
@@ -84,7 +105,7 @@ class _ChatPageState extends State<ChatPage> {
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: Colors.black,
                   ),
                 ),
                 Text(
@@ -101,7 +122,7 @@ class _ChatPageState extends State<ChatPage> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.more_horiz, color: Colors.white70),
+            icon: const Icon(Icons.more_horiz, color: Colors.black54),
             onPressed: () {},
           ),
         ],
@@ -126,7 +147,7 @@ class _ChatPageState extends State<ChatPage> {
                       if (!isMe) ...[
                         CircleAvatar(
                           radius: 16,
-                          backgroundImage: NetworkImage(widget.avatar),
+                          backgroundImage: NetworkImage(_otherAvatar),
                         ),
                         const SizedBox(width: 8),
                       ],
@@ -143,7 +164,7 @@ class _ChatPageState extends State<ChatPage> {
                               vertical: 10,
                             ),
                             decoration: BoxDecoration(
-                              color: isMe ? Theme.of(context).primaryColor : const Color(0xFF2C2C2C),
+                              color: isMe ? Theme.of(context).primaryColor : const Color(0xFFF5F5F5),
                               borderRadius: BorderRadius.circular(18),
                               boxShadow: [
                                 BoxShadow(
@@ -156,7 +177,7 @@ class _ChatPageState extends State<ChatPage> {
                             child: Text(
                               message['message'],
                               style: TextStyle(
-                                color: isMe ? Colors.white : Colors.white70,
+                                color: isMe ? Colors.white : Colors.black87,
                                 fontSize: 15,
                               ),
                             ),
@@ -175,14 +196,7 @@ class _ChatPageState extends State<ChatPage> {
                         const SizedBox(width: 8),
                         CircleAvatar(
                           radius: 16,
-                          backgroundColor: Theme.of(context).primaryColor,
-                          child: const Text(
-                            'Me',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
-                          ),
+                          backgroundImage: NetworkImage(_myAvatar ?? defaultAvatar),
                         ),
                       ],
                     ],
@@ -193,7 +207,7 @@ class _ChatPageState extends State<ChatPage> {
           ),
           Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF2C2C2C),
+              color: Colors.white,
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withAlpha(13),
@@ -211,28 +225,28 @@ class _ChatPageState extends State<ChatPage> {
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.emoji_emotions_outlined, color: Colors.white70),
+                  icon: const Icon(Icons.emoji_emotions_outlined, color: Colors.black54),
                   onPressed: () {},
                 ),
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF383838),
+                      color: const Color(0xFFF5F5F5),
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: TextField(
                       controller: _controller,
                       style: const TextStyle(
                         fontSize: 16,
-                        color: Colors.white,
+                        color: Colors.black87,
                         fontWeight: FontWeight.w500,
                       ),
                       decoration: const InputDecoration(
                         hintText: '发送消息...',
                         hintStyle: TextStyle(
                           fontSize: 16,
-                          color: Colors.white38,
+                          color: Colors.black38,
                           fontWeight: FontWeight.normal,
                         ),
                         border: InputBorder.none,
@@ -244,11 +258,11 @@ class _ChatPageState extends State<ChatPage> {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: const Icon(Icons.image_outlined, color: Colors.white70),
+                  icon: const Icon(Icons.image_outlined, color: Colors.black54),
                   onPressed: () {},
                 ),
                 IconButton(
-                  icon: const Icon(Icons.send, color: Colors.white70),
+                  icon: const Icon(Icons.send, color: Colors.black54),
                   onPressed: _sendMessage,
                 ),
               ],

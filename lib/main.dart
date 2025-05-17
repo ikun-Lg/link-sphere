@@ -17,10 +17,8 @@ import 'package:link_sphere/pages/post_detail_page.dart'; // For navigation
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
-
-
   WidgetsFlutterBinding.ensureInitialized();
-  NotiService().initNotification();
+  await NotiService.initNotification();
   await UserService.init();
   
   // 添加全局错误处理
@@ -91,8 +89,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         final String postId = match.group(1)!;
         print("[ClipboardCheck] Matched! Post ID: $postId");
 
-        // await Clipboard.setData(const ClipboardData(text: '')); // 注释掉此行，不再立即清空剪贴板
-        // print('[ClipboardCheck] Clipboard cleared.'); // 同时注释掉对应的打印
+        await Clipboard.setData(const ClipboardData(text: '')); // 注释掉此行，不再立即清空剪贴板
+        print('[ClipboardCheck] Clipboard cleared.'); // 同时注释掉对应的打印
         
         if (mounted) {
           print('[ClipboardCheck] Component is mounted. Showing dialog...');
@@ -105,14 +103,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 actions: <Widget>[
                   TextButton(
                     child: const Text("取消"),
-                    onPressed: () {
+                    onPressed: () async {
                       Navigator.of(dialogContext).pop();
+                      await Clipboard.setData(const ClipboardData(text: ''));
+                      print('[ClipboardCheck] Clipboard cleared.');
                     },
                   ),
                   TextButton(
                     child: const Text("查看"),
-                    onPressed: () {
+                    onPressed: () async {
                       Navigator.of(dialogContext).pop();
+                      await Clipboard.setData(const ClipboardData(text: ''));
+                      print('[ClipboardCheck] Clipboard cleared.');
                       navigatorKey.currentState?.push(
                         MaterialPageRoute(
                           builder: (_) => PostDetailPage(postId: postId),

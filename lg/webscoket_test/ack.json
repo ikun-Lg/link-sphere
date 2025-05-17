@@ -1,0 +1,13 @@
+// 成功ACK
+{
+  "messageId": "msg_123456",
+  "status": "SUCCESS",
+  "error": null
+}
+
+// 失败ACK
+{
+  "messageId": "msg_123456",
+  "status": "FAILED",
+  "error": "接收方不存在"
+}
