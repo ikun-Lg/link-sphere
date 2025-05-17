@@ -4,12 +4,16 @@ import 'dart:math';
 import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:dio/dio.dart';
+import 'api_service.dart';
 
 class WebSocketService {
   static final WebSocketService _instance = WebSocketService._internal();
   factory WebSocketService() => _instance;
   WebSocketService._internal();
 
+  final _apiService = ApiService();
   WebSocket? _socket;
   String? _currentUserId;
   String? _authToken;
@@ -36,8 +40,10 @@ class WebSocketService {
   Stream<String> get connectionStatus => _connectionStatusController.stream;
 
   // 在线状态流控制器
-  final _onlineStatusController = StreamController<Map<String, dynamic>>.broadcast();
-  Stream<Map<String, dynamic>> get onlineStatus => _onlineStatusController.stream;
+  final _onlineStatusController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get onlineStatus =>
+      _onlineStatusController.stream;
 
   // 消息发送队列
   final Map<String, Map<String, dynamic>> _pendingMessages = {};
@@ -49,9 +55,10 @@ class WebSocketService {
   // 订阅主题
   Stream<Map<String, dynamic>> subscribe(String topic) {
     if (!_subscriptions.containsKey(topic)) {
-      _subscriptions[topic] = StreamController<Map<String, dynamic>>.broadcast();
+      _subscriptions[topic] =
+          StreamController<Map<String, dynamic>>.broadcast();
       _topicSubscribers[topic] = [];
-      
+
       // 如果已连接，发送订阅消息
       if (_isConnected && _socket != null) {
         _sendSubscribeMessage(topic);
@@ -101,23 +108,24 @@ class WebSocketService {
   }
 
   String _generateRandomString() {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const chars =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final random = Random();
-    return List.generate(8, (index) => chars[random.nextInt(chars.length)]).join();
+    return List.generate(
+      8,
+      (index) => chars[random.nextInt(chars.length)],
+    ).join();
   }
 
   Future<bool> _checkWebSocketAvailability(String userId) async {
     print('userId: $userId');
     try {
-      final response = await http.get(
-        Uri.parse('http://115.190.33.252:8089/api/v1/ws/info?t=$userId'),
+      await _apiService.dio.get(
+        '/ws/info',
+        queryParameters: {'t': userId},
       );
-      print('[WebSocket] 检查服务可用性: ${response.body}');
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return data['websocket'] == true;
-      }
-      return false;
+      await Future.delayed(const Duration(milliseconds: 100));
+      return true;
     } catch (e) {
       print('[WebSocket] 检查服务可用性失败: $e');
       return false;
@@ -168,7 +176,8 @@ class WebSocketService {
     _isReconnecting = true;
 
     final randomString = _generateRandomString();
-    final wsUrl = 'ws://115.190.33.252:8089/api/v1/ws/$_currentUserId/$randomString/websocket';
+    final wsUrl =
+        'ws://115.190.33.252:8089/api/v1/ws/$_currentUserId/$randomString/websocket';
     print('[WebSocket] 连接地址: $wsUrl');
     print('[WebSocket] 当前重试次数: $_currentRetries');
 
@@ -176,19 +185,43 @@ class WebSocketService {
       print('[WebSocket] 开始创建 WebSocket 连接...');
       _socket = await WebSocket.connect(
         wsUrl,
-        headers: {
-          'Authorization': 'Bearer $_authToken',
-        },
+        headers: {'Authorization': 'Bearer $_authToken'},
       );
-      
+
       print('[WebSocket] WebSocket 连接成功');
       _isConnected = true;
       _isReconnecting = false;
       _currentRetries = 0;
       _connectionStatusController.add('已连接');
 
+      // 发送连接成功消息
+      final messageId = 'msg_${DateTime.now().millisecondsSinceEpoch}_${_generateRandomString()}';
+      final connectMessage = {
+        'messageId': messageId,
+        'senderId': _currentUserId,
+        'receiverId': '1', // 这里可以根据需要修改接收者ID
+        'content': '你好',
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      };
+
+      try {
+        final response = await _apiService.dio.post(
+          '/user/chat/send',
+          data: connectMessage,
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $_authToken',
+              'Accept': 'application/json',
+            },
+          ),
+        );
+        print('[WebSocket] 发送连接成功消息响应: ${response.data}');
+      } catch (e) {
+        print('[WebSocket] 发送连接成功消息失败: $e');
+      }
+
       // 重新订阅所有主题
-      // _resubscribeAllTopics();
+      _resubscribeAllTopics();
 
       // 订阅个人消息队列
       _subscribeToPersonalQueue();
@@ -280,11 +313,14 @@ class WebSocketService {
 
     if (_currentRetries < _maxRetries) {
       _currentRetries++;
-      _reconnectTimer = Timer(Duration(milliseconds: _reconnectDelay * _currentRetries), () {
-        if (!_isConnected && !_isDisposed) {
-          _connectWebSocket();
-        }
-      });
+      _reconnectTimer = Timer(
+        Duration(milliseconds: _reconnectDelay * _currentRetries),
+        () {
+          if (!_isConnected && !_isDisposed) {
+            _connectWebSocket();
+          }
+        },
+      );
     } else {
       _isReconnecting = false;
       _connectionStatusController.add('连接失败，请检查网络后重试');
@@ -294,20 +330,25 @@ class WebSocketService {
   void _startHeartbeat() {
     if (_isDisposed) return;
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(Duration(milliseconds: _heartbeatInterval), (timer) {
-      if (_isConnected && _socket != null && !_isDisposed) {
-        try {
-          _socket!.add(json.encode({
-            'type': 'heartbeat',
-            'timestamp': DateTime.now().toIso8601String(),
-          }));
-        } catch (e) {
-          if (!_isDisposed) {
-            _handleReconnect();
+    _heartbeatTimer = Timer.periodic(
+      Duration(milliseconds: _heartbeatInterval),
+      (timer) {
+        if (_isConnected && _socket != null && !_isDisposed) {
+          try {
+            _socket!.add(
+              json.encode({
+                'type': 'heartbeat',
+                'timestamp': DateTime.now().toIso8601String(),
+              }),
+            );
+          } catch (e) {
+            if (!_isDisposed) {
+              _handleReconnect();
+            }
           }
         }
-      }
-    });
+      },
+    );
   }
 
   // 发送聊天消息
@@ -319,13 +360,14 @@ class WebSocketService {
       throw Exception('WebSocket未连接');
     }
 
-    final messageId = 'msg_${DateTime.now().millisecondsSinceEpoch}_${_generateRandomString()}';
+    final messageId =
+        'msg_${DateTime.now().millisecondsSinceEpoch}_${_generateRandomString()}';
     final message = {
       'messageId': messageId,
       'senderId': _currentUserId,
       'receiverId': receiverId,
       'content': content,
-      'timestamp': DateTime.now().toIso8601String(),
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
 
     // 添加到待确认队列
@@ -340,7 +382,7 @@ class WebSocketService {
         'Authorization': 'Bearer $_authToken',
         'message-id': messageId,
         'sender-id': _currentUserId,
-      }
+      },
     };
 
     _socket!.add(json.encode(stompMessage));
@@ -352,7 +394,10 @@ class WebSocketService {
     _pendingMessages[messageId] = {
       'message': message,
       'retries': 0,
-      'timer': Timer(const Duration(seconds: 3), () => _retryMessage(messageId, message)),
+      'timer': Timer(
+        const Duration(seconds: 3),
+        () => _retryMessage(messageId, message),
+      ),
     };
     _savePendingMessages();
   }
@@ -361,10 +406,12 @@ class WebSocketService {
   Future<void> _savePendingMessages() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final messages = _pendingMessages.map((key, value) => MapEntry(key, {
-        'message': value['message'],
-        'retries': value['retries'],
-      }));
+      final messages = _pendingMessages.map(
+        (key, value) => MapEntry(key, {
+          'message': value['message'],
+          'retries': value['retries'],
+        }),
+      );
       await prefs.setString('pending_messages', json.encode(messages));
     } catch (e) {
       print('[WebSocket] 保存待确认消息失败: $e');
@@ -381,8 +428,13 @@ class WebSocketService {
       print('[WebSocket] 重试消息 $messageId (第 ${pending['retries']} 次)');
 
       // 指数退避：3s → 6s → 12s
-      final timeout = Duration(seconds: 3 * pow(2, pending['retries'] - 1).toInt());
-      pending['timer'] = Timer(timeout, () => _retryMessage(messageId, message));
+      final timeout = Duration(
+        seconds: 3 * pow(2, pending['retries'] - 1).toInt(),
+      );
+      pending['timer'] = Timer(
+        timeout,
+        () => _retryMessage(messageId, message),
+      );
 
       // 重新发送消息
       final stompMessage = {
@@ -393,7 +445,7 @@ class WebSocketService {
           'Authorization': 'Bearer $_authToken',
           'message-id': messageId,
           'sender-id': _currentUserId,
-        }
+        },
       };
       _socket?.add(json.encode(stompMessage));
     } else {
@@ -443,8 +495,10 @@ class WebSocketService {
           _pendingMessages[messageId] = {
             'message': data['message'],
             'retries': data['retries'],
-            'timer': Timer(const Duration(seconds: 3), 
-              () => _retryMessage(messageId, data['message'])),
+            'timer': Timer(
+              const Duration(seconds: 3),
+              () => _retryMessage(messageId, data['message']),
+            ),
           };
         });
       }
@@ -453,7 +507,10 @@ class WebSocketService {
     }
   }
 
-  Future<void> saveLocalMessage(String receiverId, Map<String, dynamic> message) async {
+  Future<void> saveLocalMessage(
+    String receiverId,
+    Map<String, dynamic> message,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = 'messages_${_currentUserId}_$receiverId';
@@ -470,7 +527,9 @@ class WebSocketService {
       final prefs = await SharedPreferences.getInstance();
       final key = 'messages_${_currentUserId}_$receiverId';
       final messages = prefs.getStringList(key) ?? [];
-      return messages.map((msg) => json.decode(msg) as Map<String, dynamic>).toList();
+      return messages
+          .map((msg) => json.decode(msg) as Map<String, dynamic>)
+          .toList();
     } catch (e) {
       print('[WebSocket] 获取本地消息失败: $e');
       return [];
@@ -490,7 +549,7 @@ class WebSocketService {
     _connectionStatusController.close();
     _messageController.close();
     _onlineStatusController.close();
-    
+
     // 关闭所有订阅
     for (final controller in _subscriptions.values) {
       controller.close();
@@ -507,4 +566,4 @@ class WebSocketService {
       }
     }
   }
-} 
+}

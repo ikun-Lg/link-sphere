@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:link_sphere/pages/cart_page.dart';
 import 'package:link_sphere/services/noti_service.dart';
 import 'package:link_sphere/services/user_service.dart';
-import 'package:link_sphere/services/websocket_service.dart';
 import 'pages/home_page.dart';
 import 'pages/discover_page.dart';
 import 'pages/message_page.dart';
@@ -51,46 +50,19 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
-  bool _isWebSocketInitialized = false;
+  final bool _isWebSocketInitialized = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkClipboardForSharedPost();
-    _initWebSocket();
   }
 
-  Future<void> _initWebSocket() async {
-    if (_isWebSocketInitialized) {
-      print('[App] WebSocket 已经初始化，跳过');
-      return;
-    }
-
-    try {
-      final token = await UserService.getToken();
-      if (token != null && token.isNotEmpty) {
-        final user = await UserService.getUser();
-        if (user != null) {
-          print('[App] 初始化 WebSocket 连接...');
-          await WebSocketService().connect(
-            user.id.toString(),
-            token,
-            ApiService().dio.options.baseUrl,
-          );
-          _isWebSocketInitialized = true;
-          print('[App] WebSocket 连接成功并订阅个人消息队列');
-        }
-      }
-    } catch (e) {
-      print('[App] WebSocket 初始化失败: $e');
-    }
-  }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    WebSocketService().dispose();
     super.dispose();
   }
 
@@ -99,9 +71,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       _checkClipboardForSharedPost();
-      _initWebSocket(); // 应用恢复时重新连接
     } else if (state == AppLifecycleState.paused) {
-      WebSocketService().disconnect();
     }
   }
 

@@ -127,32 +127,36 @@ class _ChatPageState extends State<ChatPage> {
               backgroundImage: NetworkImage(_otherAvatar),
             ),
             const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.username,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.username,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                StreamBuilder<String>(
-                  stream: _webSocketService.connectionStatus,
-                  builder: (context, snapshot) {
-                    final status = snapshot.data ?? '离线';
-                    return Text(
-                      status,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: status.contains('已连接') ? Colors.green[400] : Colors.grey[400],
-                      ),
-                    );
-                  },
-                ),
-              ],
+                  StreamBuilder<String>(
+                    stream: _webSocketService.connectionStatus,
+                    builder: (context, snapshot) {
+                      final status = snapshot.data ?? '离线';
+                      return Text(
+                        status,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: status.contains('已连接') ? Colors.green[400] : Colors.grey[400],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
           ],
         ),
