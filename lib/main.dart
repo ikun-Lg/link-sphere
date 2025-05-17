@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:link_sphere/pages/cart_page.dart';
 import 'package:link_sphere/services/noti_service.dart';
 import 'package:link_sphere/services/user_service.dart';
+import 'package:link_sphere/services/websocket_service.dart';
 import 'pages/home_page.dart';
 import 'pages/discover_page.dart';
 import 'pages/message_page.dart';
@@ -12,7 +13,6 @@ import 'pages/login_page.dart'; // <--- 新增：导入登录页面
 import 'services/api_service.dart'; // <--- 新增：导入 ApiService
 import 'package:flutter/services.dart'; // For Clipboard
 import 'package:link_sphere/pages/post_detail_page.dart'; // For navigation
-import 'package:link_sphere/services/websocket_service.dart'; // 更新导入
 
 // GlobalKey for NavigatorState
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -21,12 +21,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotiService.initNotification();
   await UserService.init();
-  // 新增：初始化并连接聊天服务
-  final user = await UserService.getUser();
-  final token = await UserService.getToken();
-  if (user != null && token != null) {
-    WebSocketService().connect(user.id.toString(), token, ApiService().dio.options.baseUrl);
-  }
   
   // 添加全局错误处理
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -36,6 +30,7 @@ void main() async {
   };
 
   String initialRoute = '/login'; // 默认为登录页
+  final token = await UserService.getToken();
   if (token != null && token.isNotEmpty) {
     final apiService = ApiService();
     final isValid = await apiService.validateToken(token);
@@ -56,24 +51,46 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  bool _isWebSocketInitialized = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _checkClipboardForSharedPost(); // Check on initial start
-    // 新增：监听聊天新消息，收到时本地通知
-    WebSocketService().messages.listen((msg) {
-      // 这里只做简单通知，实际可根据业务自定义内容
-      NotiService.showDailyNotification(
-        title: '新消息',
-        body: msg['content'] ?? '你收到了一条新消息',
-      );
-    });
+    _checkClipboardForSharedPost();
+    _initWebSocket();
+  }
+
+  Future<void> _initWebSocket() async {
+    if (_isWebSocketInitialized) {
+      print('[App] WebSocket 已经初始化，跳过');
+      return;
+    }
+
+    try {
+      final token = await UserService.getToken();
+      if (token != null && token.isNotEmpty) {
+        final user = await UserService.getUser();
+        if (user != null) {
+          print('[App] 初始化 WebSocket 连接...');
+          await WebSocketService().connect(
+            user.id.toString(),
+            token,
+            ApiService().dio.options.baseUrl,
+          );
+          _isWebSocketInitialized = true;
+          print('[App] WebSocket 连接成功并订阅个人消息队列');
+        }
+      }
+    } catch (e) {
+      print('[App] WebSocket 初始化失败: $e');
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    WebSocketService().dispose();
     super.dispose();
   }
 
@@ -81,8 +98,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
-      _checkClipboardForSharedPost(); // Check when app resumes
-      print('触发');
+      _checkClipboardForSharedPost();
+      _initWebSocket(); // 应用恢复时重新连接
+    } else if (state == AppLifecycleState.paused) {
+      WebSocketService().disconnect();
     }
   }
 

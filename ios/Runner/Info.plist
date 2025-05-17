@@ -51,5 +51,12 @@
 	<string>需要访问相机以拍摄图片</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>需要访问麦克风以录制视频</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

@@ -86,7 +86,10 @@ class _ChatPageState extends State<ChatPage> {
       _controller.clear();
 
       try {
-        await _webSocketService.sendMessage(widget.friendId, content);
+        await _webSocketService.sendChatMessage(
+          receiverId: widget.friendId,
+          content: content,
+        );
         setState(() {
           _messages.add({
             'isMe': true,
