@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:link_sphere/pages/cart_page.dart';
 import 'package:link_sphere/services/noti_service.dart';
@@ -57,6 +59,44 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkClipboardForSharedPost();
+    
+  }
+
+  // 定时发送通知
+  void sendLocalNotifi() {
+    // 随机通知内容列表
+    final List<Map<String, String>> notifications = [
+      {
+        'title': '每日精选',
+        'body': '来看看今天有什么新鲜事！点击查看购物车。',
+        'payload': 'open_cart'
+      },
+      {
+        'title': '新消息提醒',
+        'body': '您有新的消息待查看，点击查看详情。',
+        'payload': 'open_messages'
+      },
+      {
+        'title': '热门推荐',
+        'body': '发现了一些您可能感兴趣的内容，快来看看吧！',
+        'payload': 'open_home'
+      },
+      {
+        'title': '订单更新',
+        'body': '您的订单状态有更新，点击查看详情。',
+        'payload': 'open_orders'
+      }
+    ];
+
+    // 随机选择一个通知
+    final random = Random();
+    final notification = notifications[random.nextInt(notifications.length)];
+
+    NotiService.showDailyNotification(
+      title: notification['title']!,
+      body: notification['body']!,
+      payload: notification['payload']!,
+    );
   }
 
 

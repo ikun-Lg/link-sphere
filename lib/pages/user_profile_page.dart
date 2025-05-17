@@ -29,16 +29,16 @@ class _UserProfilePageState extends State<UserProfilePage>
   late TabController _tabController;
   Map<String, dynamic>? _userData;
   final List<Post> _userPosts = []; // 用户的笔记
-  List<Post> _likedPosts = []; // 用户赞过的帖子
+  final List<Post> _likedPosts = []; // 用户赞过的帖子
   bool _isLoading = true;
   bool _isFollowing = false;
   final ApiService _apiService = ApiService();
   bool _isLoadingPosts = false; // 加载笔记的状态
   bool _isLoadingLikedPosts = false; // 加载赞过帖子的状态
   int _currentPage = 1; // 当前页码
-  final int _currentLikedPage = 1; // 当前赞过帖子的页码
+  int _currentLikedPage = 1; // 当前赞过帖子的页码
   bool _hasMorePosts = true; // 是否还有更多笔记
-  final bool _hasMoreLikedPosts = true; // 是否还有更多赞过的帖子
+  bool _hasMoreLikedPosts = true; // 是否还有更多赞过的帖子
 
   // 添加默认图片URL常量
   static const String defaultPostImageUrl = 'https://vcover-vt-pic.puui.qpic.cn/vcover_vt_pic/0/mzc00200s5j9upv1737603032866/0?max_age=7776000';
@@ -188,24 +188,25 @@ class _UserProfilePageState extends State<UserProfilePage>
 
       if (response['code'] == 'SUCCESS_0000' && response['data'] != null) {
         final List<dynamic> postList = response['data']['list'] ?? [];
+        final List<Post> newPosts = postList.map((data) => Post.fromJson(data)).toList();
+
         setState(() {
-          _likedPosts = postList.map((json) => Post.fromJson(json)).toList();
+          _likedPosts.addAll(newPosts);
+          _currentLikedPage++;
+          _hasMoreLikedPosts = newPosts.length >= 10;
           _isLoadingLikedPosts = false;
         });
-        print('加载点赞帖子成功: ${_likedPosts.length} 条帖子');
       } else {
-        print('加载点赞帖子失败: ${response['info']}');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('加载点赞失败: ${response['info']}')),
+            SnackBar(content: Text(response['info'] ?? '获取赞过的帖子失败')),
           );
         }
       }
     } catch (e) {
-      print('加载点赞帖子异常: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加载点赞失败: $e')),
+          SnackBar(content: Text('加载赞过的帖子失败: $e')),
         );
       }
     } finally {
