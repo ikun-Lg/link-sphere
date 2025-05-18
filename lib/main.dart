@@ -14,6 +14,7 @@ import 'pages/login_page.dart'; // <--- 新增：导入登录页面
 import 'services/api_service.dart'; // <--- 新增：导入 ApiService
 import 'package:flutter/services.dart'; // For Clipboard
 import 'package:link_sphere/pages/post_detail_page.dart'; // For navigation
+import 'package:link_sphere/services/websocket_service.dart';
 
 // GlobalKey for NavigatorState
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -30,6 +31,11 @@ void main() async {
     print('堆栈跟踪: ${details.stack}');
   };
 
+  // 检查并连接WebSocket
+  final wsService = WebSocketService();
+  final connected = await wsService.checkAndConnect();
+  print('WebSocket自动连接${connected ? "成功" : "失败"}');
+  
   String initialRoute = '/login'; // 默认为登录页
   final token = await UserService.getToken();
   if (token != null && token.isNotEmpty) {

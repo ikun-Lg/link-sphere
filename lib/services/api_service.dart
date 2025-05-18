@@ -102,13 +102,27 @@ class ApiService {
   final Dio _dio = Dio(
     BaseOptions(
       baseUrl: 'https://socialite.ljq1024.cc/api/v1',
-      connectTimeout: const Duration(seconds: 30), // 增加到30秒
+      connectTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(seconds: 30),
     ),
   )..interceptors.add(
       InterceptorsWrapper(
+        onRequest: (options, handler) {
+          print('请求URL: ${options.uri}');
+          print('请求方法: ${options.method}');
+          print('请求头: ${options.headers}');
+          print('请求数据: ${options.data}');
+          return handler.next(options);
+        },
+        onResponse: (response, handler) {
+          print('响应状态码: ${response.statusCode}');
+          print('响应数据: ${response.data}');
+          return handler.next(response);
+        },
         onError: (DioException e, handler) {
           print('API错误: ${e.message}');
+          print('错误类型: ${e.type}');
+          print('错误响应: ${e.response?.data}');
           if (e.response?.statusCode == 500) {
             print('服务器内部错误: ${e.response?.data}');
           }

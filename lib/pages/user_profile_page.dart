@@ -207,13 +207,13 @@ class _UserProfilePageState extends State<UserProfilePage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('加载赞过的帖子失败: $e')),
-        );
+    );
       }
     } finally {
-      if (mounted) {
-        setState(() {
+    if (mounted) {
+      setState(() {
           _isLoadingLikedPosts = false;
-        });
+      });
       }
     }
   }
@@ -373,30 +373,30 @@ class _UserProfilePageState extends State<UserProfilePage>
                   ),
                 ),
                 if (_isFollowing) ...[
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: () {
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () {
                       // 跳转到聊天页面
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => ChatPage(
-                            username: _userData!['username'] ?? '',
-                            avatar: _userData!['avatarUrl'] ?? defaultAvatarUrl,
-                            friendId: widget.authorId,
+                            receiverId: widget.authorId.toString(),
+                            receiverName: _userData!['username'] ?? '',
+                            receiverAvatar: _userData!['avatarUrl'] ?? defaultAvatarUrl,
                           ),
                         ),
                       );
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.black,
-                      side: const BorderSide(color: Colors.grey),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.black,
+                    side: const BorderSide(color: Colors.grey),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Text('私信'),
                   ),
+                  child: const Text('私信'),
+                ),
                 ],
               ],
             ),

@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:link_sphere/main.dart';
 import 'register_page.dart';
 import 'package:link_sphere/services/api_service.dart';
+import 'package:link_sphere/services/websocket_service.dart';
+import 'package:link_sphere/services/user_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -171,11 +173,18 @@ class _LoginPageState extends State<LoginPage> {
         contactInformation: _accountController.text,
         passwordCode: _isPasswordLogin
                 ? _passwordController.text
-                : _verifyCodeController.text, // <--- 修改：确保验证码登录时使用 _verifyCodeController.text
+                : _verifyCodeController.text,
         code: _isPasswordLogin ? 2 : 1,
       );
 
       if (success) {
+        // 获取用户信息
+        final user = await UserService.getUser();
+        if (user != null) {
+          // 初始化WebSocket连接
+          await WebSocketService().initialize(user.token, user.id.toString());
+        }
+
         if (mounted) {
           _showMessage('登录成功');
           // 延迟跳转，让用户看到成功提示

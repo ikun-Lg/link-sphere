@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:link_sphere/services/user_service.dart';
-import 'package:link_sphere/services/websocket_service.dart';
+import '../models/message.dart';
+import '../services/websocket_service.dart';
+import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class ChatPage extends StatefulWidget {
-  final String username;
-  final String avatar;
-  final String friendId;
+  final String receiverId;
+  final String receiverName;
+  final String receiverAvatar;
 
   const ChatPage({
     super.key,
-    required this.username,
-    required this.avatar,
-    required this.friendId,
+    required this.receiverId,
+    required this.receiverName,
+    required this.receiverAvatar,
   });
 
   @override
@@ -19,285 +22,245 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
-  final TextEditingController _controller = TextEditingController();
+  final TextEditingController _messageController = TextEditingController();
+  final List<ChatMessage> _messages = [];
   final ScrollController _scrollController = ScrollController();
-  List<Map<String, dynamic>> _messages = [];
-  String? _myAvatar;
-  static const String defaultAvatar = 'https://tvpic.gtimg.cn/head/c2010ebc0c8b6d8521373ffeced635c8da39a3ee5e6b4b0d3255bfef95601890afd80709/361?imageView2/2/w/100';
-  final _webSocketService = WebSocketService();
+  StreamSubscription<Message>? _messageSubscription;
+  final WebSocketService _wsService = WebSocketService();
+  late SharedPreferences _prefs;
+  String get _chatKey => 'chat_${_wsService.currentUserId}_${widget.receiverId}';
 
   @override
   void initState() {
     super.initState();
-    _loadMyAvatar();
-    _loadLocalMessages();
-    _setupMessageListener();
+    _initSharedPreferences();
+    _messageSubscription = _wsService.messageStream.listen(_handleNewMessage);
   }
 
-  void _setupMessageListener() {
-    _webSocketService.messages.listen((message) {
-      if (message['senderId'] == widget.friendId) {
-        setState(() {
-          _messages.add({
-            'isMe': false,
-            'message': message['content'],
-            'time': '现在',
+  Future<void> _initSharedPreferences() async {
+    _prefs = await SharedPreferences.getInstance();
+    _loadMessages();
+  }
+
+  void _loadMessages() {
+    final savedMessages = _prefs.getStringList(_chatKey);
+    if (savedMessages != null) {
+      setState(() {
+        _messages.addAll(
+          savedMessages.map((msgJson) => ChatMessage.fromJson(jsonDecode(msgJson))).toList()
+        );
+      });
+      // 延迟滚动到底部，确保列表构建完成
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    }
+  }
+
+  Future<void> _saveMessages() async {
+    final messagesJson = _messages.map((msg) => jsonEncode(msg.toJson())).toList();
+    await _prefs.setStringList(_chatKey, messagesJson);
+  }
+
+  void _handleNewMessage(Message message) {
+    print('ChatPage 收到新消息: ${message.messageType}');
+    
+    if (message.isMessage) {
+      try {
+        final chatMessage = ChatMessage.fromJson(message.data);
+        final currentUserId = _wsService.currentUserId;
+        print('消息详情: senderId=${chatMessage.senderId}, receiverId=${chatMessage.receiverId}, currentUserId=$currentUserId, widget.receiverId=${widget.receiverId}');
+
+        // 检查消息是否属于当前聊天
+        if (chatMessage.senderId == currentUserId && chatMessage.receiverId == widget.receiverId) {
+          print('收到自己发给 ${widget.receiverName} 的消息副本，忽略');
+          return;
+        }
+
+        if (chatMessage.receiverId == currentUserId && chatMessage.senderId == widget.receiverId) {
+          print('收到 ${widget.receiverName} 发来的新消息，添加到列表');
+          setState(() {
+            _messages.add(chatMessage);
           });
-        });
-        _scrollToBottom();
+          _saveMessages();
+          _delayedScrollToBottom(); // 使用延迟滚动
+        } else {
+          print('消息不匹配当前聊天，忽略');
+        }
+      } catch (e) {
+        print('处理聊天消息时出错: $e');
+        print('消息数据: ${message.data}');
       }
-    });
-  }
-
-  Future<void> _loadMyAvatar() async {
-    final user = await UserService.getUser();
-    setState(() {
-      _myAvatar = (user != null && user.avatarUrl.isNotEmpty) ? user.avatarUrl : defaultAvatar;
-    });
-  }
-
-  Future<void> _loadLocalMessages() async {
-    final msgs = await _webSocketService.getLocalMessages(widget.friendId);
-    setState(() {
-      _messages = msgs.map((msg) => {
-        'isMe': msg['senderId'] == _webSocketService.getCurrentUserId(),
-        'message': msg['content'],
-        'time': '现在',
-      }).toList();
-    });
-    _scrollToBottom();
+    } else if (message.isAck) {
+      try {
+        final ack = MessageAck.fromJson(message.data);
+        print('收到消息确认: messageId=${ack.messageId}, status=${ack.status}');
+        
+        if (ack.status != 'SUCCESS' && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('消息发送失败: ${ack.message}')),
+          );
+        }
+      } catch (e) {
+        print('处理消息确认时出错: $e');
+        print('消息数据: ${message.data}');
+      }
+    }
   }
 
   void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _delayedScrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+      if (mounted) {
+        _scrollToBottom();
       }
     });
   }
 
-  void _sendMessage() async {
-    if (_controller.text.isNotEmpty) {
-      final content = _controller.text;
-      _controller.clear();
+  Future<void> _sendMessage() async {
+    final content = _messageController.text.trim();
+    if (content.isEmpty) return;
 
-      try {
-        await _webSocketService.sendChatMessage(
-          receiverId: widget.friendId,
-          content: content,
-        );
-        setState(() {
-          _messages.add({
-            'isMe': true,
-            'message': content,
-            'time': '现在',
-          });
-        });
-        _scrollToBottom();
-      } catch (e) {
+    final tempMessage = ChatMessage(
+      messageId: DateTime.now().millisecondsSinceEpoch.toString(),
+      content: content,
+      senderId: _wsService.currentUserId ?? '',
+      receiverId: widget.receiverId,
+      sendTime: DateTime.now().toIso8601String(),
+      read: false,
+    );
+
+    // 先添加到本地列表并保存
+    setState(() {
+      _messages.add(tempMessage);
+    });
+    _saveMessages();
+    _delayedScrollToBottom(); // 使用延迟滚动
+
+    _messageController.clear();
+
+    try {
+      final success = await _wsService.sendMessage(content, widget.receiverId);
+      if (!success) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('消息发送失败')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('发送消息失败: $e')),
+          SnackBar(content: Text('发送消息出错: $e')),
         );
       }
     }
   }
 
-  String get _otherAvatar => (widget.avatar.isEmpty) ? defaultAvatar : widget.avatar;
+  @override
+  void dispose() {
+    _messageSubscription?.cancel();
+    _messageController.dispose();
+    _scrollController.dispose();
+    _saveMessages(); // 退出聊天页面时保存
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final currentUserId = _wsService.currentUserId;
+
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0.5,
-        titleSpacing: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.black87),
-          onPressed: () => Navigator.pop(context),
-        ),
         title: Row(
           children: [
             CircleAvatar(
-              radius: 18,
-              backgroundImage: NetworkImage(_otherAvatar),
+              backgroundImage: NetworkImage(widget.receiverAvatar),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.username,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  StreamBuilder<String>(
-                    stream: _webSocketService.connectionStatus,
-                    builder: (context, snapshot) {
-                      final status = snapshot.data ?? '离线';
-                      return Text(
-                        status,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: status.contains('已连接') ? Colors.green[400] : Colors.grey[400],
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(widget.receiverName, overflow: TextOverflow.ellipsis)),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_horiz, color: Colors.black54),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: Column(
         children: [
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              padding: const EdgeInsets.all(16),
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final message = _messages[index];
-                final bool isMe = message['isMe'];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Row(
-                    mainAxisAlignment:
-                        isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (!isMe) ...[
-                        CircleAvatar(
-                          radius: 16,
-                          backgroundImage: NetworkImage(_otherAvatar),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      Column(
-                        crossAxisAlignment:
-                            isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            constraints: BoxConstraints(
-                              maxWidth: MediaQuery.of(context).size.width * 0.7,
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isMe ? Theme.of(context).primaryColor : const Color(0xFFF5F5F5),
-                              borderRadius: BorderRadius.circular(18),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withAlpha(13),
-                                  blurRadius: 5,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Text(
-                              message['message'],
-                              style: TextStyle(
-                                color: isMe ? Colors.white : Colors.black87,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            message['time'],
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
+                final isMe = message.senderId == currentUserId;
+                
+                return Align(
+                  alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isMe ? Colors.blue : Colors.grey[300],
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      message.content,
+                      style: TextStyle(
+                        color: isMe ? Colors.white : Colors.black,
                       ),
-                      if (isMe) ...[
-                        const SizedBox(width: 8),
-                        CircleAvatar(
-                          radius: 16,
-                          backgroundImage: NetworkImage(_myAvatar ?? defaultAvatar),
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
                 );
               },
             ),
           ),
           Container(
+            padding: const EdgeInsets.all(8.0),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).scaffoldBackgroundColor,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withAlpha(13),
-                  offset: const Offset(0, -1),
-                  blurRadius: 5,
+                  color: Colors.grey.withOpacity(0.2),
+                  spreadRadius: 1,
+                  blurRadius: 3,
+                  offset: const Offset(0, -2),
                 ),
               ],
             ),
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 12,
-              bottom: MediaQuery.of(context).padding.bottom + 12,
-            ),
             child: Row(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.emoji_emotions_outlined, color: Colors.black54),
-                  onPressed: () {},
-                ),
                 Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF5F5F5),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: TextField(
-                      controller: _controller,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.black87,
-                        fontWeight: FontWeight.w500,
+                  child: TextField(
+                    controller: _messageController,
+                    decoration: InputDecoration(
+                      hintText: '输入消息...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(25.0),
+                        borderSide: BorderSide.none,
                       ),
-                      decoration: const InputDecoration(
-                        hintText: '发送消息...',
-                        hintStyle: TextStyle(
-                          fontSize: 16,
-                          color: Colors.black38,
-                          fontWeight: FontWeight.normal,
-                        ),
-                        border: InputBorder.none,
-                      ),
-                      onSubmitted: (_) => _sendMessage(),
+                      filled: true,
+                      fillColor: Colors.grey[200],
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                     ),
+                    maxLines: null,
+                    keyboardType: TextInputType.multiline,
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.send, color: Colors.black54),
+                const SizedBox(width: 8),
+                FloatingActionButton(
                   onPressed: _sendMessage,
+                  mini: true,
+                  elevation: 0,
+                  child: const Icon(Icons.send),
                 ),
               ],
             ),
@@ -305,12 +268,5 @@ class _ChatPageState extends State<ChatPage> {
         ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _scrollController.dispose();
-    super.dispose();
   }
 }

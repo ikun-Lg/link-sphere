@@ -44,10 +44,19 @@ class PostBottomBar extends StatelessWidget {
             ),
             // Collect button
             TextButton.icon(
-              icon: Icon(
-                isCollected ? Icons.star : Icons.star_border,
-                color: isCollected ? Colors.amber : null,
-              ),
+              icon: isCollectLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+                      ),
+                    )
+                  : Icon(
+                      isCollected ? Icons.star : Icons.star_border,
+                      color: isCollected ? Colors.amber : null,
+                    ),
               label: Text(isCollected ? '已收藏' : '收藏'),
               onPressed: isCollectLoading ? null : onCollectPressed,
             ),

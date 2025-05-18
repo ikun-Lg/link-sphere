@@ -173,8 +173,8 @@ class _PostDetailPageState extends State<PostDetailPage> {
         setState(() {
           postDetail = response['data'];
           isFollowing = postDetail?['followedAuthor'] ?? false;
-          isCollected = postDetail?['isCollected'] ?? false;
-          isLiked = postDetail?['isLiked'] ?? false;
+          isCollected = postDetail?['collected'] ?? false;
+          isLiked = postDetail?['liked'] ?? false;
           likesCount = postDetail?['likesCount'] ?? 0;
           isLoading = false;
         });
@@ -869,10 +869,9 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
     try {
       Map<String, dynamic> response;
-      if (isLiked) {
-        // 注意：此时 isLiked 已经是目标状态
+      if (!originalLikedState) { // 如果之前未点赞，则进行点赞操作
         response = await ApiService().likePost(postId);
-      } else {
+      } else { // 如果之前已点赞，则进行取消点赞操作
         response = await ApiService().unlikePost(postId);
       }
 
@@ -881,7 +880,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(!originalLikedState ? '取消点赞成功' : '点赞成功'),
+              content: Text(!originalLikedState ? '点赞成功' : '取消点赞成功'),
               duration: const Duration(seconds: 1),
             ),
           );
@@ -892,14 +891,11 @@ class _PostDetailPageState extends State<PostDetailPage> {
           isLiked = originalLikedState;
           likesCount = originalLikesCount;
         });
-        // 修改点：错误信息基于操作意图
-        final String defaultErrorMessage = originalLikedState ? '取消点赞失败' : '点赞失败';
-        throw response['info'] ?? defaultErrorMessage;
+        throw response['info'] ?? (originalLikedState ? '取消点赞失败' : '点赞失败');
       }
     } catch (e) {
       // 捕获到异常，回滚 UI
       if (mounted) {
-        // 检查 mounted 状态避免 setState 错误
         setState(() {
           isLiked = originalLikedState;
           likesCount = originalLikesCount;
