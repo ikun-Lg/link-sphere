@@ -6,6 +6,7 @@ import 'package:web_socket_channel/status.dart' as status;
 import '../models/message.dart';
 import 'user_service.dart';
 import 'noti_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class WebSocketService {
   static final WebSocketService _instance = WebSocketService._internal();
@@ -208,6 +209,9 @@ class WebSocketService {
           print("消息接收者匹配，添加到消息流");
           _messageController.add(messageObj);
           
+          // 保存消息到本地存储
+          _saveMessageToLocal(chatMessage);
+          
           // 发送本地通知
           NotiService.showDailyNotification(
             title: '新消息',
@@ -229,6 +233,42 @@ class WebSocketService {
     } catch (e) {
       print('处理消息时出错: $e');
       print('原始消息内容: $message');
+    }
+  }
+
+  // 保存消息到本地存储
+  Future<void> _saveMessageToLocal(ChatMessage message) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final chatKey = 'chat_${message.senderId}_${message.receiverId}';
+      
+      // 获取现有消息
+      final savedMessages = prefs.getStringList(chatKey) ?? [];
+      
+      // 添加新消息
+      savedMessages.add(jsonEncode(message.toJson()));
+      
+      // 保存回本地存储
+      await prefs.setStringList(chatKey, savedMessages);
+      print('消息已保存到本地存储: $chatKey');
+    } catch (e) {
+      print('保存消息到本地存储时出错: $e');
+    }
+  }
+
+  // 获取本地存储的消息
+  Future<List<ChatMessage>> getLocalMessages(String senderId, String receiverId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final chatKey = 'chat_${senderId}_$receiverId';
+      
+      final savedMessages = prefs.getStringList(chatKey) ?? [];
+      return savedMessages
+          .map((msgJson) => ChatMessage.fromJson(jsonDecode(msgJson)))
+          .toList();
+    } catch (e) {
+      print('获取本地存储消息时出错: $e');
+      return [];
     }
   }
 

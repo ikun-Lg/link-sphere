@@ -35,29 +35,25 @@ class _ChatPageState extends State<ChatPage> {
     super.initState();
     _initSharedPreferences();
     _messageSubscription = _wsService.messageStream.listen(_handleNewMessage);
+    _loadLocalMessages();
   }
 
   Future<void> _initSharedPreferences() async {
     _prefs = await SharedPreferences.getInstance();
-    _loadMessages();
   }
 
-  void _loadMessages() {
-    final savedMessages = _prefs.getStringList(_chatKey);
-    if (savedMessages != null) {
+  Future<void> _loadLocalMessages() async {
+    final currentUserId = _wsService.currentUserId;
+    if (currentUserId != null) {
+      final messages = await _wsService.getLocalMessages(
+        widget.receiverId,
+        currentUserId,
+      );
       setState(() {
-        _messages.addAll(
-          savedMessages.map((msgJson) => ChatMessage.fromJson(jsonDecode(msgJson))).toList()
-        );
+        _messages.addAll(messages);
       });
-      // 延迟滚动到底部，确保列表构建完成
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      _delayedScrollToBottom();
     }
-  }
-
-  Future<void> _saveMessages() async {
-    final messagesJson = _messages.map((msg) => jsonEncode(msg.toJson())).toList();
-    await _prefs.setStringList(_chatKey, messagesJson);
   }
 
   void _handleNewMessage(Message message) {
@@ -80,8 +76,7 @@ class _ChatPageState extends State<ChatPage> {
           setState(() {
             _messages.add(chatMessage);
           });
-          _saveMessages();
-          _delayedScrollToBottom(); // 使用延迟滚动
+          _delayedScrollToBottom();
         } else {
           print('消息不匹配当前聊天，忽略');
         }
@@ -137,12 +132,11 @@ class _ChatPageState extends State<ChatPage> {
       read: false,
     );
 
-    // 先添加到本地列表并保存
+    // 先添加到本地列表
     setState(() {
       _messages.add(tempMessage);
     });
-    _saveMessages();
-    _delayedScrollToBottom(); // 使用延迟滚动
+    _delayedScrollToBottom();
 
     _messageController.clear();
 
@@ -169,7 +163,6 @@ class _ChatPageState extends State<ChatPage> {
     _messageSubscription?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
-    _saveMessages(); // 退出聊天页面时保存
     super.dispose();
   }
 
