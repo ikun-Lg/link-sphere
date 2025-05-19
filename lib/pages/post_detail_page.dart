@@ -10,6 +10,7 @@ import 'package:link_sphere/pages/user_profile_page.dart'; // 导入新页面
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:flutter/services.dart'; // 导入剪贴板服务
+import 'package:link_sphere/models/discover_model.dart'; // 添加 DiscoverPost 模型导入
 
 class PostDetailPage extends StatefulWidget {
   final String postId;
@@ -1375,12 +1376,23 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
                             return GestureDetector(
                               onTap: () {
+                                // 将商品数据转换为 DiscoverPost 模型
+                                final discoverPost = DiscoverPost(
+                                  id: int.tryParse(product['id'].toString()) ?? 0,
+                                  title: product['name'] ?? product['title'] ?? '无标题',
+                                  description: product['description'] ?? '',
+                                  imageUrl: firstImage,
+                                  price: (product['price'] as num?)?.toDouble() ?? 0.0,
+                                  shopName: product['shopName'] ?? '精选店铺',
+                                  sales: (product['sales'] as num?)?.toInt() ?? 0,
+                                  likes: 0,
+                                  comments: 0,
+                                );
+                                
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder:
-                                        (context) =>
-                                            ProductDetailPage(product: product),
+                                    builder: (context) => ProductDetailPage(product: discoverPost),
                                   ),
                                 );
                               },

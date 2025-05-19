@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,9 @@ import 'register_page.dart';
 import 'package:link_sphere/services/api_service.dart';
 import 'package:link_sphere/services/websocket_service.dart';
 import 'package:link_sphere/services/user_service.dart';
+import 'package:link_sphere/services/noti_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:link_sphere/models/message.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -181,8 +185,57 @@ class _LoginPageState extends State<LoginPage> {
         // 获取用户信息
         final user = await UserService.getUser();
         if (user != null) {
-          // 初始化WebSocket连接
-          await WebSocketService().initialize(user.token, user.id.toString());
+          // 创建新的 WebSocketService 实例
+          final wsService = WebSocketService();
+          // 初始化新的 WebSocket 连接
+          await wsService.initialize(user.token, user.id.toString());
+
+          // 获取未读消息
+          try {
+            final unreadMessages = await _apiService.getUnreadMessages();
+            if (unreadMessages['code'] == 'SUCCESS_0000' && unreadMessages['data'] != null) {
+              final messages = unreadMessages['data'] as List;
+              for (var messageGroup in messages) {
+                final userId = messageGroup['userId'];
+                final username = messageGroup['username'];
+                final messageList = messageGroup['messageList'] as List;
+                
+                // 对每条消息进行通知和保存
+                for (var message in messageList) {
+                  // 发送通知
+                  await NotiService.showDailyNotification(
+                    title: '来自 $username 的新消息',
+                    body: message['content'] ?? '新消息',
+                    payload: 'open_messages',
+                  );
+
+                  // 将消息转换为 ChatMessage 格式并保存
+                  final chatMessage = ChatMessage(
+                    senderId: userId.toString(),
+                    receiverId: user.id.toString(),
+                    content: message['content'] ?? '',
+                    sendTime: DateTime.fromMillisecondsSinceEpoch(
+                      message['timestamp'] ?? DateTime.now().millisecondsSinceEpoch
+                    ).toIso8601String(),
+                    messageId: message['id'] ?? '',
+                    read: false,
+                  );
+                  
+                  // 保存消息到本地存储
+                  final prefs = await SharedPreferences.getInstance();
+                  final chatKey = 'chat_${userId}_${user.id}';
+                  final savedMessages = prefs.getStringList(chatKey) ?? [];
+                  savedMessages.add(jsonEncode(chatMessage.toJson()));
+                  await prefs.setStringList(chatKey, savedMessages);
+                }
+              }
+
+              // 标记消息已读
+              await _apiService.markMessagesAsRead();
+            }
+          } catch (e) {
+            print('获取未读消息失败: $e');
+          }
         }
 
         if (mounted) {

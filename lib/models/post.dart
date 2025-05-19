@@ -12,7 +12,7 @@ class Post {
   final int sharesCount;
   final int viewsCount;
   final int isSticky;
-  final bool liked; // 添加 liked 字段
+  final bool liked;
 
   Post({
     required this.id,
@@ -28,7 +28,7 @@ class Post {
     required this.sharesCount,
     required this.viewsCount,
     required this.isSticky,
-    required this.liked, // 添加 liked 到构造函数
+    required this.liked,
   });
 
   factory Post.fromJson(Map<String, dynamic> json) {
@@ -38,7 +38,7 @@ class Post {
       authorName: json['authorName'] ?? '',
       authorAvatar: json['authorAvatar'] ?? '',
       title: json['title'] ?? '',
-      content: json['text'] ?? json['content'] ?? '',  // 处理两种可能的字段名
+      content: json['text'] ?? json['content'] ?? '',
       images: json['images'] ?? '',
       likesCount: int.parse((json['likesCount'] ?? 0).toString()),
       collectCount: int.parse((json['collectCount'] ?? 0).toString()),
@@ -46,7 +46,26 @@ class Post {
       sharesCount: int.parse((json['sharesCount'] ?? 0).toString()),
       viewsCount: int.parse((json['viewsCount'] ?? 0).toString()),
       isSticky: int.parse((json['isSticky'] ?? 0).toString()),
-      liked: json['liked'] ?? false, // 解析 liked 字段，默认为 false
+      liked: json['liked'] ?? false,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'authorId': authorId,
+      'authorName': authorName,
+      'authorAvatar': authorAvatar,
+      'title': title,
+      'content': content,
+      'images': images,
+      'likesCount': likesCount,
+      'collectCount': collectCount,
+      'commentsCount': commentsCount,
+      'sharesCount': sharesCount,
+      'viewsCount': viewsCount,
+      'isSticky': isSticky,
+      'liked': liked,
+    };
   }
 }

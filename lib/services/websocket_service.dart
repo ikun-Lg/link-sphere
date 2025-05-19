@@ -21,11 +21,11 @@ class WebSocketService {
   String? _currentUserId;
 
   // 消息流控制器
-  final _messageController = StreamController<Message>.broadcast();
+  StreamController<Message> _messageController = StreamController<Message>.broadcast();
   Stream<Message> get messageStream => _messageController.stream;
 
   // 连接状态流控制器
-  final _connectionController = StreamController<bool>.broadcast();
+  StreamController<bool> _connectionController = StreamController<bool>.broadcast();
   Stream<bool> get connectionStream => _connectionController.stream;
 
   // 获取当前用户ID
@@ -50,6 +50,15 @@ class WebSocketService {
   Future<void> initialize(String token, String userId) async {
     _token = token;
     _currentUserId = userId;
+    
+    // 如果 StreamController 已关闭，创建新的实例
+    if (_messageController.isClosed) {
+      _messageController = StreamController<Message>.broadcast();
+    }
+    if (_connectionController.isClosed) {
+      _connectionController = StreamController<bool>.broadcast();
+    }
+    
     await connect();
     _startHeartbeat();
   }
@@ -66,28 +75,38 @@ class WebSocketService {
       
       _channel!.stream.listen(
         (message) {
+          if (!_messageController.isClosed) {
           _handleMessage(message);
+          }
         },
         onError: (error) {
           print('WebSocket Error: $error');
           _isConnected = false;
+          if (!_connectionController.isClosed) {
           _connectionController.add(false);
+          }
           _reconnect();
         },
         onDone: () {
           print('WebSocket connection closed');
           _isConnected = false;
+          if (!_connectionController.isClosed) {
           _connectionController.add(false);
+          }
           _reconnect();
         },
       );
 
       _isConnected = true;
+      if (!_connectionController.isClosed) {
       _connectionController.add(true);
+      }
     } catch (e) {
       print('WebSocket connection error: $e');
       _isConnected = false;
+      if (!_connectionController.isClosed) {
       _connectionController.add(false);
+      }
       _reconnect();
     }
   }
@@ -227,6 +246,18 @@ class WebSocketService {
       } else if (messageObj.isAdvertisement) {
         print('收到广告消息: ${messageObj.data}');
         _messageController.add(messageObj);
+        
+        // 解析广告消息
+        final advertisement = Advertisement.fromJson(messageObj.data);
+        
+        // 发送广告通知
+        NotiService.showDailyNotification(
+          title: advertisement.title,
+          body: advertisement.content,
+          payload: 'open_advertisement_${advertisement.advertisementId}',
+          imageUrl: advertisement.imageUrl,
+          isAdvertisement: true,
+        );
       } else {
         print('收到未知类型的消息: ${messageObj.messageType}');
       }

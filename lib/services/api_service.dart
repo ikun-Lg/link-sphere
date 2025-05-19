@@ -459,7 +459,7 @@ class ApiService {
   Future<Map<String, dynamic>> getUserInfo(int? userId) async {
     // 尝试获取 token
     final token = await UserService.getToken();
-    
+    print('userId:$userId');
     try {
       final response = await _dio.get(
         '/user/info/$userId', // 使用路径参数
@@ -1882,6 +1882,95 @@ class ApiService {
         return [];
       }
       throw response.data['info'] ?? '获取历史消息失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // --- 新增：获取未读消息 ---
+  Future<Map<String, dynamic>> getUnreadMessages() async {
+    final token = await UserService.getToken();
+    if (token == null) {
+      throw '用户未登录';
+    }
+
+    try {
+      final response = await _dio.get(
+        '/user/messages/unread',
+        options: Options(
+          headers: {
+            'Authorization': token,
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data['code'] == 'SUCCESS_0000') {
+        return response.data;
+      }
+      throw response.data['info'] ?? '获取未读消息失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // --- 新增：标记消息已读 ---
+  Future<bool> markMessagesAsRead() async {
+    final token = await UserService.getToken();
+    if (token == null) {
+      throw '用户未登录';
+    }
+
+    try {
+      final response = await _dio.get(
+        '/user/messages/markRead',
+        options: Options(
+          headers: {
+            'Authorization': token,
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data['code'] == 'SUCCESS_0000') {
+        return true;
+      }
+      return false;
+    } on DioException catch (e) {
+      print('标记消息已读失败: ${_handleError(e)}');
+      return false;
+    }
+  }
+  // --- 新增结束 ---
+
+  // 获取用户的帖子列表
+  Future<Map<String, dynamic>> getUserPosts({
+    required String authorId,
+    int page = 1,
+    int size = 10,
+  }) async {
+    final token = await UserService.getToken();
+    try {
+      final response = await _dio.get(
+        '/posts/list/$authorId',
+        queryParameters: {
+          'page': page,
+          'size': size,
+        },
+        options: Options(
+          headers: {
+            'Authorization': token ?? '',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      print('Get User Posts Response: ${response.data}');
+
+      if (response.statusCode == 200 && response.data['code'] == 'SUCCESS_0000') {
+        return response.data;
+      }
+      throw response.data['info'] ?? '获取用户帖子列表失败';
     } on DioException catch (e) {
       throw _handleError(e);
     }

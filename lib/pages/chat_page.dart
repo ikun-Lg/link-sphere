@@ -45,12 +45,23 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _loadLocalMessages() async {
     final currentUserId = _wsService.currentUserId;
     if (currentUserId != null) {
-      final messages = await _wsService.getLocalMessages(
+      // 加载双向的消息记录
+      final messages1 = await _wsService.getLocalMessages(
         widget.receiverId,
         currentUserId,
       );
+      final messages2 = await _wsService.getLocalMessages(
+        currentUserId,
+        widget.receiverId,
+      );
+      
+      // 合并消息并按时间排序
+      final allMessages = [...messages1, ...messages2];
+      allMessages.sort((a, b) => DateTime.parse(a.sendTime).compareTo(DateTime.parse(b.sendTime)));
+      
       setState(() {
-        _messages.addAll(messages);
+        _messages.clear();
+        _messages.addAll(allMessages);
       });
       _delayedScrollToBottom();
     }
@@ -138,9 +149,32 @@ class _ChatPageState extends State<ChatPage> {
     });
     _delayedScrollToBottom();
 
+    // 保存消息到本地存储
+    try {
+      final savedMessages = _prefs.getStringList(_chatKey) ?? [];
+      savedMessages.add(jsonEncode(tempMessage.toJson()));
+      await _prefs.setStringList(_chatKey, savedMessages);
+    } catch (e) {
+      print('保存消息到本地存储失败: $e');
+    }
+
     _messageController.clear();
 
     try {
+      // 检查 WebSocket 连接状态
+      if (!_wsService.isConnected) {
+        print('WebSocket 连接已断开，尝试重新连接...');
+        // 尝试重新连接
+        await _wsService.checkAndConnect();
+        // 等待一小段时间确保连接建立
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        // 再次检查连接状态
+        if (!_wsService.isConnected) {
+          throw Exception('WebSocket 重连失败');
+        }
+      }
+
       final success = await _wsService.sendMessage(content, widget.receiverId);
       if (!success) {
         if (mounted) {

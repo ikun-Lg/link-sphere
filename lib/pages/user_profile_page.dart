@@ -5,6 +5,7 @@ import '../services/user_service.dart';
 import '../services/api_service.dart';
 import '../pages/chat_page.dart'; // 添加聊天页面导入
 import '../models/post.dart';
+import '../pages/post_detail_page.dart'; // 添加帖子详情页面导入
 
 // 简单的 Post 模型（如果需要更复杂的结构，可以复用 models/post.dart）
 class MockPost {
@@ -65,6 +66,7 @@ class _UserProfilePageState extends State<UserProfilePage>
     try {
       final response = await _apiService.getUserInfo(int.parse(widget.authorId));
       if (response['code'] == 'SUCCESS_0000') {
+        // print("获取用户信息"+response['data']);
         setState(() {
           _userData = response['data'];
           _isFollowing = _userData!['follow'] ?? false;
@@ -136,9 +138,10 @@ class _UserProfilePageState extends State<UserProfilePage>
     setState(() {
       _isLoadingPosts = true;
     });
-
+print('userId${widget.authorId}');
     try {
-      final response = await _apiService.getAuthorPosts(
+      final response = await _apiService.getUserPosts(
+        authorId: widget.authorId,
         page: _currentPage,
         size: 10,
       );
@@ -445,47 +448,62 @@ class _UserProfilePageState extends State<UserProfilePage>
         }
 
         final post = posts[index];
-        return Card(
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.network(
-                post.images.isNotEmpty ? post.images[0] : defaultPostImageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Image.network(
-                  defaultPostImageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const Center(
-                    child: Icon(Icons.broken_image),
-                  ),
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PostDetailPage(
+                  postId: post.id.toString(),
                 ),
               ),
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [Colors.black.withOpacity(0.6), Colors.transparent],
+            );
+          },
+          child: Card(
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.network(
+                  post.images.isNotEmpty ? post.images : defaultPostImageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    print('图片加载错误: $error');
+                    return Image.network(
+                      defaultPostImageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Center(
+                        child: Icon(Icons.broken_image),
+                      ),
+                    );
+                  },
+                ),
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [Colors.black.withOpacity(0.6), Colors.transparent],
+                      ),
+                    ),
+                    child: Text(
+                      post.title,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  child: Text(
-                    post.title,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },

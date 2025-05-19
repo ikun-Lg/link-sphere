@@ -142,6 +142,247 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   }
   // --- 新增结束 ---
 
+  // --- 新增：显示立即购买数量选择弹窗 ---
+  void _showBuyNowDialogByAddCart() {
+    int quantity = 1; // 默认数量
+    bool isBuying = false; // 购买中状态
+    
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder( // 圆角
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+      ),
+      builder: (BuildContext context) {
+        return StatefulBuilder( // 使用 StatefulBuilder 来更新弹窗内的状态
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Container(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('选择购买数量', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline),
+                        onPressed: quantity > 1 ? () {
+                          setModalState(() {
+                            quantity--;
+                          });
+                        } : null, // 数量大于1时才可减
+                      ),
+                      Text('$quantity', style: const TextStyle(fontSize: 18)),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline),
+                        onPressed: () {
+                          // 可以根据库存 _productInfo?['stock'] 进行限制
+                          setModalState(() {
+                            quantity++;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isBuying ? null : () async {
+                        setModalState(() {
+                          isBuying = true;
+                        });
+                        Navigator.pop(context); // 关闭弹窗
+                        _handleBuyNow(quantity); // 调用立即购买逻辑
+                      },
+                      style: ElevatedButton.styleFrom(
+                         backgroundColor: Colors.blue,
+                         padding: const EdgeInsets.symmetric(vertical: 12),
+                         shape: RoundedRectangleBorder(
+                           borderRadius: BorderRadius.circular(20),
+                         ),
+                      ),
+                      child: isBuying
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Text('立即购买'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+  // --- 新增结束 ---
+
+  // --- 新增：处理立即购买逻辑 ---
+  Future<void> _handleBuyNow(int quantity) async {
+    if (_productInfo == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('商品信息不存在')),
+      );
+      return;
+    }
+
+    try {
+      print('创建支付订单${_productInfo!['id']}');
+      final response = await _apiService.createPayOrder(_productInfo!['id']);
+      print('获取支付二维码$response');
+      if (response['code'] == 'SUCCESS_0000') {
+
+        final String qrCodeUrl = response['data'];
+        if (qrCodeUrl.isNotEmpty) {
+          if (mounted) {
+            await _showQrCodeDialog(qrCodeUrl);
+          }
+        } else {
+          throw '获取支付二维码失败';
+        }
+      } else {
+        throw response['info'] ?? '创建支付订单失败';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('购买失败: $e')),
+        );
+      }
+    }
+  }
+  // --- 新增结束 ---
+
+  // --- 新增：显示二维码弹窗 ---
+  Future<void> _showQrCodeDialog(String qrCodeUrl) async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // 用户必须点击按钮关闭
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('商品支付'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text('请扫描下方二维码完成对商品 "${_productInfo?['name'] ?? ''}" 的支付：'),
+                const SizedBox(height: 16),
+                Center(
+                  child: Image.network(
+                    qrCodeUrl,
+                    height: 200,
+                    width: 200,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                              : null,
+                        ),
+                      );
+                    },
+                    errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
+                      return const Center(child: Text('二维码加载失败'));
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('完成支付'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+  // --- 新增结束 ---
+  
+  // // --- 新增：显示立即购买数量选择弹窗 ---
+  // void _showBuyNowDialogByAddCart() {
+  //   int quantity = 1; // 默认数量
+  //   bool isBuying = false; // 购买中状态
+    
+  //   showModalBottomSheet(
+  //     context: context,
+  //     shape: const RoundedRectangleBorder( // 圆角
+  //       borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+  //     ),
+  //     builder: (BuildContext context) {
+  //       return StatefulBuilder( // 使用 StatefulBuilder 来更新弹窗内的状态
+  //         builder: (BuildContext context, StateSetter setModalState) {
+  //           return Container(
+  //             padding: const EdgeInsets.all(20),
+  //             child: Column(
+  //               mainAxisSize: MainAxisSize.min,
+  //               crossAxisAlignment: CrossAxisAlignment.start,
+  //               children: <Widget>[
+  //                 const Text('选择购买数量', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+  //                 const SizedBox(height: 20),
+  //                 Row(
+  //                   mainAxisAlignment: MainAxisAlignment.center,
+  //                   children: [
+  //                     IconButton(
+  //                       icon: const Icon(Icons.remove_circle_outline),
+  //                       onPressed: quantity > 1 ? () {
+  //                         setModalState(() {
+  //                           quantity--;
+  //                         });
+  //                       } : null, // 数量大于1时才可减
+  //                     ),
+  //                     Text('$quantity', style: const TextStyle(fontSize: 18)),
+  //                     IconButton(
+  //                       icon: const Icon(Icons.add_circle_outline),
+  //                       onPressed: () {
+  //                         // 可以根据库存 _productInfo?['stock'] 进行限制
+  //                         setModalState(() {
+  //                           quantity++;
+  //                         });
+  //                       },
+  //                     ),
+  //                   ],
+  //                 ),
+  //                 const SizedBox(height: 20),
+  //                 SizedBox(
+  //                   width: double.infinity,
+  //                   child: ElevatedButton(
+  //                     onPressed: isBuying ? null : () async {
+  //                       setModalState(() {
+  //                         isBuying = true;
+  //                       });
+  //                       Navigator.pop(context); // 关闭弹窗
+  //                       _handleBuyNow(quantity); // 调用立即购买逻辑
+  //                     },
+  //                     style: ElevatedButton.styleFrom(
+  //                        backgroundColor: Colors.blue,
+  //                        padding: const EdgeInsets.symmetric(vertical: 12),
+  //                        shape: RoundedRectangleBorder(
+  //                          borderRadius: BorderRadius.circular(20),
+  //                        ),
+  //                     ),
+  //                     child: isBuying
+  //                         ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+  //                         : const Text('立即购买'),
+  //                   ),
+  //                 ),
+  //               ],
+  //             ),
+  //           );
+  //         },
+  //       );
+  //     },
+  //   );
+  // }
+  // // --- 新增结束 ---
+
   // --- 新增：处理加入购物车逻辑 ---
   Future<void> _handleAddToCart(int quantity) async {
     // 检查登录状态
@@ -468,21 +709,19 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               ),
               const SizedBox(width: 12),
               // 立即购买按钮
-              Expanded(
-                flex: 1,
-                child: ElevatedButton(
-                  onPressed: () {
-                    // TODO: 实现购买逻辑 (类似加入购物车，可能需要先弹窗选数量)
-                  },
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                  ),
-                  child: const Text('立即购买'),
-                ),
-              ),
+                          Expanded(
+                            flex: 1,
+                            child: ElevatedButton(
+                              onPressed: _productInfo == null ? null : _showBuyNowDialogByAddCart,
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
+                              child: const Text('立即购买'),
+                            ),
+                          ),
             ],
           ),
         ),
