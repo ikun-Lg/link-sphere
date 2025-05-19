@@ -1307,7 +1307,7 @@ class ApiService {
     try {
       // 注意：这里的 post 请求会使用上面 Dio 实例配置的超时时间
       final response = await _dio.post(
-        '/file/upload',
+        '/file/local/upload',
         data: formData,
         options: Options(
           headers: {

@@ -229,13 +229,33 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     }
 
     try {
-      print('创建支付订单${_productInfo!['id']}');
-      final response = await _apiService.createPayOrder(_productInfo!['id']);
-      print('获取支付二维码$response');
-      if (response['code'] == 'SUCCESS_0000') {
+      // 确保商品 ID 是整数
+      final productId = _productInfo!['id'] is int 
+        ? _productInfo!['id'] 
+        : int.tryParse(_productInfo!['id'].toString()) ?? 0;
 
-        final String qrCodeUrl = response['data'];
-        if (qrCodeUrl.isNotEmpty) {
+      if (productId == 0) {
+        throw '无效的商品 ID';
+      }
+
+      // 1. 先加入购物车
+      final addCartResponse = await _apiService.addToCart(
+        productId: productId,
+        productNum: quantity,
+      );
+
+      if (addCartResponse['code'] != 'SUCCESS_0000') {
+        throw addCartResponse['info'] ?? '加入购物车失败';
+      }
+
+      // 2. 创建支付订单
+      print('创建支付订单$productId');
+      final payResponse = await _apiService.createPayOrder(productId);
+      print('获取支付二维码$payResponse');
+      
+      if (payResponse['code'] == 'SUCCESS_0000') {
+        final String? qrCodeUrl = payResponse['data'] as String?;
+        if (qrCodeUrl != null && qrCodeUrl.isNotEmpty) {
           if (mounted) {
             await _showQrCodeDialog(qrCodeUrl);
           }
@@ -243,7 +263,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           throw '获取支付二维码失败';
         }
       } else {
-        throw response['info'] ?? '创建支付订单失败';
+        throw payResponse['info'] ?? '创建支付订单失败';
       }
     } catch (e) {
       if (mounted) {

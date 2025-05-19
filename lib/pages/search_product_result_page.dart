@@ -65,9 +65,9 @@ class _SearchProductResultPageState extends State<SearchProductResultPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('搜索失败: $e')),
-        );
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   // SnackBar(content: Text('搜索失败: $e')),
+        // );
       }
     } finally {
       if (mounted) {

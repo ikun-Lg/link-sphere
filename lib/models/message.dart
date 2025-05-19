@@ -25,6 +25,7 @@ class Message {
   bool get isAck => messageType == 'ack';
   bool get isMessage => messageType == 'message';
   bool get isHeartbeat => messageType == 'heartbeat';
+  bool get isOffline => messageType == 'offline';
 }
 
 class ChatMessage {
