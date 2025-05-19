@@ -7,6 +7,11 @@ import '../models/message.dart';
 import 'user_service.dart';
 import 'noti_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../main.dart'; // <--- 新增导入
+import 'package:flutter/material.dart'; // <--- 新增导入
+import '../pages/login_page.dart'; // <--- 新增导入，确保路径正确
+import 'api_service.dart'; // 确保导入 ApiService
+import '../models/user.dart'; // 确保导入 User 模型 (如果 getUserProfileById 返回 User 对象)
 
 class WebSocketService {
   static final WebSocketService _instance = WebSocketService._internal();
@@ -189,89 +194,169 @@ class WebSocketService {
     });
   }
 
+  SharedPreferences? _prefs; // 添加 SharedPreferences 实例
+
+  // WebSocketService._internal() {  <--- REMOVE THIS CONSTRUCTOR
+  //   _initPrefs(); // 初始化 SharedPreferences
+  // }
+
+  Future<void> _initPrefs() async {
+    _prefs = await SharedPreferences.getInstance();
+  }
+
+  // Helper to get chat key, ensure consistency with ChatPage
+  String _getChatKey(String userId1, String userId2) {
+    // Sort IDs to ensure consistency, e.g., 'chat_1_2' is same as 'chat_2_1'
+    List<String> ids = [userId1, userId2];
+    ids.sort();
+    return 'chat_${ids[0]}_${ids[1]}';
+  }
+
   // 处理接收到的消息
-  void _handleMessage(dynamic message) {
+  void _handleMessage(String message) async {
     try {
-      print('收到原始消息: $message');
+      final decodedMessage = jsonDecode(message);
+      final msg = Message.fromJson(decodedMessage);
+      print('收到消息1: ${jsonEncode(msg.toJson())}');
       
-      // 检查消息是否为字符串
-      if (message is! String) {
-        print('消息不是字符串格式，忽略');
-        return;
-      }
-      
-      // 检查消息是否为有效的 JSON
-      if (!message.startsWith('{') || !message.endsWith('}')) {
-        print('消息不是有效的 JSON 格式，忽略');
-        return;
-      }
-      
-      final Map<String, dynamic> data = jsonDecode(message);
-      final Message messageObj = Message.fromJson(data);
-      
-      if (messageObj.isMessage) {
-        print("收到消息类型: ${messageObj.messageType}");
-        print("消息数据: ${messageObj.data}");
+      if (msg.isMessage) {
+        final chatMessage = ChatMessage.fromJson(msg.data);
+        if (!_messageController.isClosed) {
+          _messageController.add(msg);
+        }
+        print('收到消息2: ${jsonEncode(chatMessage.toJson())}');
         
-        // 验证消息数据格式
-        if (!messageObj.data.containsKey('senderId') || 
-            !messageObj.data.containsKey('receiverId') ||
-            !messageObj.data.containsKey('content')) {
-          print('消息数据缺少必要字段，忽略');
-          return;
+        // 确保 SharedPreferences 已初始化
+        if (_prefs == null) {
+          await _initPrefs();
         }
         
-        final chatMessage = ChatMessage.fromJson(messageObj.data);
-        print("解析后的消息: senderId=${chatMessage.senderId}, receiverId=${chatMessage.receiverId}, currentUserId=$_currentUserId");
-        
-        if (chatMessage.receiverId == _currentUserId) {
-          print("消息接收者匹配，添加到消息流");
-          _messageController.add(messageObj);
-          
-          // 保存消息到本地存储
-          _saveMessageToLocal(chatMessage);
-          
-          // 发送本地通知
+        // 将收到的消息保存到本地
+        if (_prefs != null) {
+          try {
+            final chatKey = _getChatKey(chatMessage.senderId, chatMessage.receiverId);
+            final savedMessages = _prefs!.getStringList(chatKey) ?? [];
+            
+            // 检查消息是否已存在
+            bool messageExists = savedMessages.any((m) {
+              try {
+                final existingMsg = jsonDecode(m);
+                return existingMsg['messageId'] == chatMessage.messageId;
+              } catch (e) {
+                return false;
+              }
+            });
+            
+            if (!messageExists) {
+              savedMessages.add(jsonEncode(chatMessage.toJson()));
+              await _prefs!.setStringList(chatKey, savedMessages);
+              print('消息已保存到本地存储: $chatKey, 消息ID: ${chatMessage.messageId}');
+            } else {
+              print('消息已存在，跳过保存: ${chatMessage.messageId}');
+            }
+          } catch (e) {
+            print('保存消息到本地存储失败: $e');
+          }
+        }
+
+        // 仅当消息不是由当前用户发送时才显示通知 (这部分逻辑和之前一样)
+        if (chatMessage.senderId != _currentUserId) {
+          String senderName = chatMessage.senderId; // 默认使用 senderId
+          String senderAvatar = "https://tvpic.gtimg.cn/head/c2010ebc0c8b6d8521373ffeced635c8da39a3ee5e6b4b0d3255bfef95601890afd80709/361?imageView2/2/w/100"; // 默认头像
+
+          try {
+            // 调用API获取发送者信息
+            final apiService = ApiService();
+            // 注意：您需要确保 ApiService 中有类似 getUserProfileById 的方法
+            // 并且该方法能正确处理可能发生的异常
+            int? senderIdInt = int.tryParse(chatMessage.senderId);
+            if (senderIdInt != null) {
+              final userInfoResponse = await apiService.getUserInfo(senderIdInt);
+
+              // 假设 getUserProfileById 返回的是一个包含用户信息的Map，或者一个User对象
+              // 例如，如果返回的是 User 对象:
+              // final User senderInfo = User.fromJson(userInfoResponse['data']);
+              // senderName = senderInfo.username;
+              // senderAvatar = senderInfo.avatarUrl;
+
+              // 或者如果直接返回包含 username 和 avatarUrl 的 Map:
+              if (userInfoResponse['code'] == 'SUCCESS_0000' && userInfoResponse['data'] != null) {
+                  final userData = userInfoResponse['data'];
+                  senderName = userData['username'] ?? chatMessage.senderId;
+                  // 移除 avatarUrl 周围可能存在的反引号和空格
+                  String? rawAvatarUrl = userData['avatarUrl'];
+                  if (rawAvatarUrl != null) {
+                    senderAvatar = rawAvatarUrl.trim().replaceAll('`', '');
+                  } else {
+                    senderAvatar = senderAvatar; // Keep default if null
+                  }
+              } else {
+                  print('获取发送者 ${chatMessage.senderId} 信息失败: ${userInfoResponse['info']}');
+              }
+            } else {
+              print('无法将 senderId ${chatMessage.senderId} 转换为整数');
+            }
+
+          } catch (e) {
+            print('获取发送者 ${chatMessage.senderId} 信息时出错: $e');
+            // 出错时，保持使用 senderId 和默认头像
+          }
+
           NotiService.showDailyNotification(
-            title: '新消息',
+            title: '新消息来自 $senderName',
             body: chatMessage.content,
-            payload: 'open_messages',
+            payload: jsonEncode({
+              'type': 'chat',
+              'senderId': chatMessage.senderId,
+              'senderName': senderName, 
+              'senderAvatar': senderAvatar, 
+            }),
           );
-        } else {
-          print("消息接收者不匹配，忽略消息");
         }
-      } else if (messageObj.isAck) {
-        print('收到消息确认: ${messageObj.data}');
-        _messageController.add(messageObj);
-      } else if (messageObj.isAdvertisement) {
-        print('收到广告消息: ${messageObj.data}');
-        _messageController.add(messageObj);
-        
-        // 解析广告消息
-        final advertisement = Advertisement.fromJson(messageObj.data);
-        
-        // 发送广告通知
+      } else if (msg.isAdvertisement) {
+        print('收到广告消息: ${msg.data}'); // <--- Use 'msg' here
+        if (!_messageController.isClosed) {
+          _messageController.add(msg); // <--- Use 'msg' here
+        }
+        final advertisement = Advertisement.fromJson(msg.data); // <--- Use 'msg' here
         NotiService.showDailyNotification(
           title: advertisement.title,
           body: advertisement.content,
-          payload: 'open_advertisement_${advertisement.advertisementId}',
-          imageUrl: advertisement.imageUrl,
-          isAdvertisement: true,
+          payload: jsonEncode({
+            'type': 'advertisement',
+            'id': advertisement.advertisementId,
+            'entityId': advertisement.entityId,
+            'entityType': advertisement.entityType,
+            'link': advertisement.link,
+          }),
+          imageUrl: advertisement.imageUrl, // 传递图片URL
+          isAdvertisement: true, // 标记为广告通知
         );
+      } else if (msg.isOffline) { 
+        print('接收到离线消息，执行注销操作');
+        UserService.clearUser();
+        navigatorKey.currentState?.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+          (Route<dynamic> route) => false,
+        );
+      } else if (msg.isAck) {
+        final ack = MessageAck.fromJson(msg.data);
+        print('收到ACK: ${ack.messageId} - ${ack.status}');
       } else {
-        print('收到未知类型的消息: ${messageObj.messageType}');
+        print('收到未知类型的消息: ${msg.messageType}'); // <--- Use 'msg' here
       }
     } catch (e) {
-      print('处理消息时出错: $e');
-      print('原始消息内容: $message');
+      print('处理消息失败: $e');
     }
   }
 
   // 保存消息到本地存储
+  // 保存消息到本地存储
   Future<void> _saveMessageToLocal(ChatMessage message) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final chatKey = 'chat_${message.senderId}_${message.receiverId}';
+      // 使用 _getChatKey 方法确保一致性
+      final chatKey = _getChatKey(message.senderId, message.receiverId);
       
       // 获取现有消息
       final savedMessages = prefs.getStringList(chatKey) ?? [];
@@ -291,9 +376,11 @@ class WebSocketService {
   Future<List<ChatMessage>> getLocalMessages(String senderId, String receiverId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final chatKey = 'chat_${senderId}_$receiverId';
+      // 使用 _getChatKey 方法确保一致性
+      final chatKey = _getChatKey(senderId, receiverId);
       
       final savedMessages = prefs.getStringList(chatKey) ?? [];
+      print('从本地存储加载消息: $chatKey, 消息数量: ${savedMessages.length}');
       return savedMessages
           .map((msgJson) => ChatMessage.fromJson(jsonDecode(msgJson)))
           .toList();
@@ -327,4 +414,10 @@ class WebSocketService {
 
   // 检查连接状态
   bool get isConnected => _isConnected;
+
+  void _handleNewMessage(Message message) {
+    print('收到新消息: ${message.messageType}');
+    print('消息数据: ${message.data}');
+    // ... 其余代码 ...
+  }
 }

@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:link_sphere/pages/cart_page.dart';
+import 'package:link_sphere/pages/chat_page.dart';
+import 'package:link_sphere/pages/order_page.dart'; //确保导入 OrderPage
 import 'package:link_sphere/services/noti_service.dart';
 import 'package:link_sphere/services/user_service.dart';
 import 'pages/home_page.dart';
@@ -59,13 +63,106 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final bool _isWebSocketInitialized = false;
+  StreamSubscription<String?>? _notificationSubscription; // 新增 StreamSubscription
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkClipboardForSharedPost();
-    
+    _setupNotificationListener(); // 新增调用
+  }
+
+  // --- 新增：设置通知监听 --- 
+  void _setupNotificationListener() {
+    _notificationSubscription = NotiService.selectNotificationStream.stream.listen((String? payload) { // <--- 修改处
+      if (payload != null) {
+        try {
+          // Try to decode as JSON first for structured payloads
+          Map<String, dynamic> payloadData = {};
+          bool isJson = false;
+          try {
+            payloadData = jsonDecode(payload);
+            isJson = true;
+          } catch (e) {
+            // Not a JSON payload, treat as simple string
+            isJson = false;
+          }
+
+          if (isJson) {
+            final String? type = payloadData['type'];
+
+            if (type == 'chat') {
+              print('lg');
+              final String? senderId = payloadData['senderId'];
+              final String? senderName = payloadData['senderName'];
+               String? senderAvatar = payloadData['senderAvatar'];
+              print((senderId != null && senderName != null && senderAvatar != null));
+              senderAvatar ?? (senderAvatar = "https://tvpic.gtimg.cn/head/c2010ebc0c8b6d8521373ffeced635c8da39a3ee5e6b4b0d3255bfef95601890afd80709/361?imageView2/2/w/100");
+              if (senderId != null && senderName != null) {
+                navigatorKey.currentState?.push(
+                  MaterialPageRoute(
+                    builder: (context) => ChatPage(
+                      receiverId: senderId,
+                      receiverName: senderName,
+                      receiverAvatar: senderAvatar ?? "https://tvpic.gtimg.cn/head/c2010ebc0c8b6d8521373ffeced635c8da39a3ee5e6b4b0d3255bfef95601890afd80709/361?imageView2/2/w/100",
+                    ),
+                  ),
+                );
+              }
+            } else if (type == 'advertisement' || type == 'post') {
+              final String? id = payloadData['id']?.toString();
+              if (id != null) {
+                // 假设有 PostDetailPage，并且它接收 postId
+                // navigatorKey.currentState?.push(
+                //   MaterialPageRoute(
+                //     builder: (context) => PostDetailPage(postId: id),
+                //   ),
+                // );
+                debugPrint('导航到帖子/广告详情页: $id'); // 替换为实际的导航逻辑
+              }
+            } else if (type == 'product') {
+              final String? id = payloadData['id']?.toString();
+              if (id != null) {
+                // 假设有 ProductDetailPage，并且它接收 productId
+                // navigatorKey.currentState?.push(
+                //   MaterialPageRoute(
+                //     builder: (context) => ProductDetailPage(productId: int.parse(id)),
+                //   ),
+                // );
+                debugPrint('导航到商品详情页: $id'); // 替换为实际的导航逻辑
+              }
+            }
+          } else {
+            // Handle simple string payloads
+            if (payload == 'open_messages') {
+               navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const MessagePage()));
+            } else if (payload == 'open_cart') {
+               navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => CartPage())); // Ensure CartPage is imported if not const
+            } else if (payload == 'open_home') {
+              // 首页可能不需要特殊导航，或者根据需求调整
+              debugPrint("Notification action: 'open_home'. Current context is MyApp. No new HomePage pushed if already on home.");
+            } else if (payload == 'open_orders') { // <--- 新增处理 open_orders
+              navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const OrderPage()));
+            } else if (payload.startsWith('open_advertisement_')) { // Fallback for older advertisement format if needed
+                final advertisementId = payload.replaceAll('open_advertisement_', '');
+                // TODO: 导航到广告详情页面, e.g., using a specific page or showing a dialog
+                debugPrint('Opening advertisement (legacy format): $advertisementId');
+            }
+          }
+        } catch (e) {
+          debugPrint('解析或处理通知 payload 失败: $e. Payload: $payload');
+        }
+      }
+    });
+  }
+  // --- 新增结束 ---
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _notificationSubscription?.cancel(); // 取消监听
+    super.dispose();
   }
 
   // 定时发送通知
@@ -105,12 +202,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     );
   }
 
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {

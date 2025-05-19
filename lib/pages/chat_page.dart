@@ -28,14 +28,21 @@ class _ChatPageState extends State<ChatPage> {
   StreamSubscription<Message>? _messageSubscription;
   final WebSocketService _wsService = WebSocketService();
   late SharedPreferences _prefs;
-  String get _chatKey => 'chat_${_wsService.currentUserId}_${widget.receiverId}';
+  // String get _chatKey => 'chat_${_wsService.currentUserId}_${widget.receiverId}'; // 旧的
+  String get _chatKey { // 新的，确保一致性
+    if (_wsService.currentUserId == null) return 'chat_unknown_${widget.receiverId}'; // 处理 currentUserId 为 null 的情况
+    List<String> ids = [_wsService.currentUserId!, widget.receiverId];
+    ids.sort();
+    return 'chat_${ids[0]}_${ids[1]}';
+  }
 
   @override
   void initState() {
     super.initState();
     _initSharedPreferences();
-    _messageSubscription = _wsService.messageStream.listen(_handleNewMessage);
     _loadLocalMessages();
+    // 订阅 WebSocket 消息
+    _messageSubscription = _wsService.messageStream.listen(_handleNewMessage);
   }
 
   Future<void> _initSharedPreferences() async {
@@ -43,27 +50,36 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _loadLocalMessages() async {
-    final currentUserId = _wsService.currentUserId;
-    if (currentUserId != null) {
-      // 加载双向的消息记录
-      final messages1 = await _wsService.getLocalMessages(
-        widget.receiverId,
-        currentUserId,
-      );
-      final messages2 = await _wsService.getLocalMessages(
-        currentUserId,
-        widget.receiverId,
-      );
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final messageStrings = prefs.getStringList(_chatKey) ?? [];
+      print('ChatPage 加载本地消息: $_chatKey, 消息数量: ${messageStrings.length}');
       
-      // 合并消息并按时间排序
-      final allMessages = [...messages1, ...messages2];
-      allMessages.sort((a, b) => DateTime.parse(a.sendTime).compareTo(DateTime.parse(b.sendTime)));
+      final loadedMessages = messageStrings
+          .map((s) {
+            try {
+              return ChatMessage.fromJson(jsonDecode(s));
+            } catch (e) {
+              print('解析消息失败: $e, 消息内容: $s');
+              return null;
+            }
+          })
+          .where((msg) => msg != null)
+          .cast<ChatMessage>()
+          .toList();
+      
+      // 按时间排序（从早到晚）
+      loadedMessages.sort((a, b) => DateTime.parse(a.sendTime).compareTo(DateTime.parse(b.sendTime)));
       
       setState(() {
         _messages.clear();
-        _messages.addAll(allMessages);
+        _messages.addAll(loadedMessages);
       });
+      
+      print('成功加载 ${loadedMessages.length} 条消息');
       _delayedScrollToBottom();
+    } catch (e) {
+      print('加载本地消息失败: $e');
     }
   }
 
@@ -77,19 +93,28 @@ class _ChatPageState extends State<ChatPage> {
         print('消息详情: senderId=${chatMessage.senderId}, receiverId=${chatMessage.receiverId}, currentUserId=$currentUserId, widget.receiverId=${widget.receiverId}');
 
         // 检查消息是否属于当前聊天
-        if (chatMessage.senderId == currentUserId && chatMessage.receiverId == widget.receiverId) {
-          print('收到自己发给 ${widget.receiverName} 的消息副本，忽略');
-          return;
-        }
+        bool isCurrentChat = (chatMessage.senderId == currentUserId && chatMessage.receiverId == widget.receiverId) ||
+                           (chatMessage.receiverId == currentUserId && chatMessage.senderId == widget.receiverId);
 
-        if (chatMessage.receiverId == currentUserId && chatMessage.senderId == widget.receiverId) {
-          print('收到 ${widget.receiverName} 发来的新消息，添加到列表');
+        if (isCurrentChat) {
+          print('收到当前聊天的消息，添加到列表');
           setState(() {
-            _messages.add(chatMessage);
+            // 找到正确的插入位置
+            int insertIndex = _messages.indexWhere((msg) => 
+              DateTime.parse(msg.sendTime).isAfter(DateTime.parse(chatMessage.sendTime))
+            );
+            
+            if (insertIndex == -1) {
+              // 如果没有找到更晚的消息，则添加到末尾
+              _messages.add(chatMessage);
+            } else {
+              // 在正确的位置插入消息
+              _messages.insert(insertIndex, chatMessage);
+            }
           });
           _delayedScrollToBottom();
         } else {
-          print('消息不匹配当前聊天，忽略');
+          print('消息不属于当前聊天，忽略');
         }
       } catch (e) {
         print('处理聊天消息时出错: $e');

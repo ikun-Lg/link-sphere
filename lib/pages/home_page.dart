@@ -37,8 +37,8 @@ class _HomePageState extends State<HomePage>
   String _username = '';
   String _avatarUrl = '';
 
-  // Add StreamSubscription for notifications
-  StreamSubscription<String?>? _notificationSubscription;
+  // Remove StreamSubscription for notifications
+  // StreamSubscription<String?>? _notificationSubscription; // <--- 移除
 
   @override
   void initState() {
@@ -68,42 +68,42 @@ class _HomePageState extends State<HomePage>
     
     _loadUserInfo();
 
-    // Listen to notification stream
-    _notificationSubscription = NotiService.selectNotificationStream.stream.listen((String? payload) {
-      if (payload != null && payload.isNotEmpty) {
-        debugPrint('HomePage: Received notification payload: $payload');
-        if (payload == 'open_cart') {
-          if (mounted) {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => CartPage()));
-          }
-        } else if (payload == 'open_orders') {
-          if (mounted) {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const OrderPage()));
-          }
-        } else if (payload == 'open_home') {
-          if (mounted) {
-            debugPrint("Notification action: 'open_home'. Current context is HomePage. No new HomePage pushed.");
-          }
-        } else if (payload == 'open_messages') {
-          if (mounted) {
-            // 导航到消息页面
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const MessagePage(),
-              ),
-            );
-          }
-        } else if (payload.startsWith('open_advertisement_')) {
-          if (mounted) {
-            // 处理广告点击
-            final advertisementId = payload.replaceAll('open_advertisement_', '');
-            // TODO: 导航到广告详情页面
-            debugPrint('Opening advertisement: $advertisementId');
-          }
-        }
-      }
-    });
+    // Listen to notification stream  // <--- 移除以下所有监听逻辑
+    // _notificationSubscription = NotiService.selectNotificationStream.stream.listen((String? payload) {
+    //   if (payload != null && payload.isNotEmpty) {
+    //     debugPrint('HomePage: Received notification payload: $payload');
+    //     if (payload == 'open_cart') {
+    //       if (mounted) {
+    //         Navigator.push(context, MaterialPageRoute(builder: (context) => CartPage()));
+    //       }
+    //     } else if (payload == 'open_orders') {
+    //       if (mounted) {
+    //         Navigator.push(context, MaterialPageRoute(builder: (context) => const OrderPage()));
+    //       }
+    //     } else if (payload == 'open_home') {
+    //       if (mounted) {
+    //         debugPrint("Notification action: 'open_home'. Current context is HomePage. No new HomePage pushed.");
+    //       }
+    //     } else if (payload == 'open_messages') {
+    //       if (mounted) {
+    //         // 导航到消息页面
+    //         Navigator.push(
+    //           context,
+    //           MaterialPageRoute(
+    //             builder: (context) => const MessagePage(),
+    //           ),
+    //         );
+    //       }
+    //     } else if (payload.startsWith('open_advertisement_')) {
+    //       if (mounted) {
+    //         // 处理广告点击
+    //         final advertisementId = payload.replaceAll('open_advertisement_', '');
+    //         // TODO: 导航到广告详情页面
+    //         debugPrint('Opening advertisement: $advertisementId');
+    //       }
+    //     }
+    //   }
+    // });
   }
   
   // 添加加载用户信息的方法
@@ -121,7 +121,7 @@ class _HomePageState extends State<HomePage>
   void dispose() {
     _tabController.dispose();
     _scrollController.dispose();
-    _notificationSubscription?.cancel(); // Cancel the subscription
+    // _notificationSubscription?.cancel(); // Cancel the subscription // <--- 移除
     super.dispose();
   }
 
