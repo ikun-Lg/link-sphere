@@ -1758,13 +1758,14 @@ class ApiService {
   // 获取订单列表
   Future<Map<String, dynamic>> getOrders({
     int type = -1,
-    int page = 1,
-    int size = 10,
+    int page = 0,
+    int size = 20,
   }) async {
     final token = await UserService.getToken();
     if (token == null) {
       throw '用户未登录';
     }
+    print('请求参数:$page&$size&$type');
 
     try {
       final response = await _dio.get(
@@ -1971,6 +1972,33 @@ class ApiService {
         return response.data;
       }
       throw response.data['info'] ?? '获取用户帖子列表失败';
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // --- 新增：获取订单剩余时间 ---
+  Future<Map<String, dynamic>> getOrderCountdown(int orderId) async {
+    final token = await UserService.getToken();
+    if (token == null) {
+      throw '用户未登录';
+    }
+
+    try {
+      final response = await _dio.get(
+        '/sale/$orderId/countdown',
+        options: Options(
+          headers: {
+            'Authorization': token,
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data['code'] == 'SUCCESS_0000') {
+        return response.data;
+      }
+      throw response.data['info'] ?? '获取订单剩余时间失败';
     } on DioException catch (e) {
       throw _handleError(e);
     }

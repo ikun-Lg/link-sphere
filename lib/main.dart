@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:link_sphere/pages/cart_page.dart';
 import 'package:link_sphere/pages/chat_page.dart';
 import 'package:link_sphere/pages/order_page.dart'; //确保导入 OrderPage
+import 'package:link_sphere/pages/product_detail_page.dart'; // 添加商品详情页导入
 import 'package:link_sphere/services/noti_service.dart';
 import 'package:link_sphere/services/user_service.dart';
 import 'pages/home_page.dart';
@@ -19,6 +20,7 @@ import 'services/api_service.dart'; // <--- 新增：导入 ApiService
 import 'package:flutter/services.dart'; // For Clipboard
 import 'package:link_sphere/pages/post_detail_page.dart'; // For navigation
 import 'package:link_sphere/services/websocket_service.dart';
+import 'package:link_sphere/models/discover_model.dart'; // 添加 DiscoverPost 导入
 
 // GlobalKey for NavigatorState
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -75,7 +77,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   // --- 新增：设置通知监听 --- 
   void _setupNotificationListener() {
-    _notificationSubscription = NotiService.selectNotificationStream.stream.listen((String? payload) { // <--- 修改处
+    _notificationSubscription = NotiService.selectNotificationStream.stream.listen((String? payload) async { // <--- 添加 async
       if (payload != null) {
         try {
           // Try to decode as JSON first for structured payloads
@@ -110,16 +112,70 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   ),
                 );
               }
-            } else if (type == 'advertisement' || type == 'post') {
-              final String? id = payloadData['id']?.toString();
-              if (id != null) {
-                // 假设有 PostDetailPage，并且它接收 postId
-                // navigatorKey.currentState?.push(
-                //   MaterialPageRoute(
-                //     builder: (context) => PostDetailPage(postId: id),
-                //   ),
-                // );
-                debugPrint('导航到帖子/广告详情页: $id'); // 替换为实际的导航逻辑
+            } else if (type == 'advertisement') {
+              final String? advertisementType = payloadData['advertisementType'];
+              final String? entityType = payloadData['entityType'];
+              final String? entityId = payloadData['entityId'];
+              final String? link = payloadData['link'];
+
+              if (advertisementType == 'external' && link != null) {
+                // TODO: 处理外部广告链接
+                print('处理外部广告链接: $link');
+              } else if (advertisementType == 'internal' && entityType != null && entityId != null) {
+                if (entityType == 'product' || entityType == 'internal-product') {
+                  try {
+                    final productData = await ApiService().getProductDetail(int.parse(entityId));
+                    if (productData['code'] == 'SUCCESS_0000' && productData['data'] != null) {
+                      final product = productData['data'];
+                      final discoverPost = DiscoverPost(
+                        id: int.tryParse(entityId) ?? 0,
+                        title: product['name'] ?? '无标题',
+                        description: product['description'] ?? '',
+                        imageUrl: product['mainImage'] ?? 'https://via.placeholder.com/300',
+                        price: (product['price'] as num?)?.toDouble() ?? 0.0,
+                        shopName: product['shopName'] ?? '精选店铺',
+                        sales: (product['sales'] as num?)?.toInt() ?? 0,
+                        likes: 0,
+                        comments: 0,
+                      );
+                      navigatorKey.currentState?.push(
+                        MaterialPageRoute(
+                          builder: (_) => ProductDetailPage(product: discoverPost),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    print('获取商品详情失败: $e');
+                  }
+                } else if (entityType == 'internal-posts') {
+                  navigatorKey.currentState?.push(
+                    MaterialPageRoute(
+                      builder: (_) => PostDetailPage(postId: entityId),
+                    ),
+                  );
+                }
+              } else if (type == 'post') {
+                final String? id = payloadData['id']?.toString();
+                if (id != null) {
+                  // 假设有 PostDetailPage，并且它接收 postId
+                  navigatorKey.currentState?.push(
+                    MaterialPageRoute(
+                      builder: (context) => PostDetailPage(postId: id),
+                    ),
+                  );
+                  debugPrint('导航到帖子/广告详情页: $id'); // 替换为实际的导航逻辑
+                }
+              } else if (type == 'product') {
+                final String? id = payloadData['id']?.toString();
+                if (id != null) {
+                  // 假设有 ProductDetailPage，并且它接收 productId
+                  // navigatorKey.currentState?.push(
+                  //   MaterialPageRoute(
+                  //     builder: (context) => ProductDetailPage(productId: int.parse(id)),
+                  //   ),
+                  // );
+                  debugPrint('导航到商品详情页: $id'); // 替换为实际的导航逻辑
+                }
               }
             } else if (type == 'product') {
               final String? id = payloadData['id']?.toString();

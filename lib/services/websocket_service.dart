@@ -324,13 +324,13 @@ class WebSocketService {
           body: advertisement.content,
           payload: jsonEncode({
             'type': 'advertisement',
-            'id': advertisement.advertisementId,
+            'advertisementType': advertisement.advertisementType,
             'entityId': advertisement.entityId,
             'entityType': advertisement.entityType,
             'link': advertisement.link,
           }),
-          imageUrl: advertisement.imageUrl, // 传递图片URL
-          isAdvertisement: true, // 标记为广告通知
+          imageUrl: advertisement.imageUrl,
+          isAdvertisement: true,
         );
       } else if (msg.isOffline) { 
         print('接收到离线消息，执行注销操作');

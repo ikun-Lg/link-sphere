@@ -14,13 +14,15 @@ class _OrderPageState extends State<OrderPage> {
   List<dynamic> _orders = [];
   String? _error;
   int _selectedType = -1;
-  int _currentPage = 1;
-  final int _pageSize = 10;
+  int _currentPage = 0;
+  final int _pageSize = 30;
   bool _hasMore = true;
   final ScrollController _scrollController = ScrollController();
 
   // 存储每个订单的倒计时定时器
   final Map<String, Timer?> _orderTimers = {};
+  // 存储每个订单的剩余时间（秒）
+  final Map<String, int> _orderRemainingSeconds = {};
 
   @override
   void initState() {
@@ -40,24 +42,38 @@ class _OrderPageState extends State<OrderPage> {
     super.dispose();
   }
 
-  // 计算订单剩余支付时间
-  String _calculateRemainingTime(String orderTime) {
-    final orderDateTime = DateTime.parse(orderTime);
-    final expirationTime = orderDateTime.add(const Duration(minutes: 30));
-    final now = DateTime.now();
-    final remaining = expirationTime.difference(now);
-
-    if (remaining.isNegative) {
-      return '已超时';
+  // 获取订单剩余时间
+  Future<void> _fetchOrderCountdown(String orderId) async {
+    try {
+      final response = await _apiService.getOrderCountdown(int.parse(orderId));
+      if (response['code'] == 'SUCCESS_0000') {
+        final data = response['data'];
+        if (mounted) {
+          setState(() {
+            // 处理 remainingTime 为字符串的情况
+            final remainingTimeStr = data['remainingTime'].toString();
+            final totalSeconds = int.tryParse(remainingTimeStr) ?? 0;
+            _orderRemainingSeconds[orderId] = totalSeconds;
+            
+            // 如果订单未过期且剩余时间大于0，启动倒计时
+            if (!data['expire'] && totalSeconds > 0) {
+              _startOrderTimer(orderId);
+            } else {
+              // 如果订单已过期，取消定时器并刷新列表
+              _orderTimers[orderId]?.cancel();
+              _orderTimers.remove(orderId);
+              _fetchOrders();
+            }
+          });
+        }
+      }
+    } catch (e) {
+      print('获取订单剩余时间失败: $e');
     }
-
-    final minutes = remaining.inMinutes;
-    final seconds = remaining.inSeconds % 60;
-    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
   // 启动订单倒计时
-  void _startOrderTimer(String orderId, String orderTime) {
+  void _startOrderTimer(String orderId) {
     _orderTimers[orderId]?.cancel(); // 取消之前的定时器
 
     _orderTimers[orderId] = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -66,78 +82,19 @@ class _OrderPageState extends State<OrderPage> {
         return;
       }
 
-      final remainingTime = _calculateRemainingTime(orderTime);
-      if (remainingTime == '已超时') {
-        timer.cancel();
-        _orderTimers.remove(orderId);
-        setState(() {}); // 触发重建以更新UI
-      }
+      setState(() {
+        final currentSeconds = _orderRemainingSeconds[orderId] ?? 0;
+        if (currentSeconds > 0) {
+          _orderRemainingSeconds[orderId] = currentSeconds - 1;
+        } else {
+          timer.cancel();
+          _orderTimers.remove(orderId);
+          // 如果订单过期，刷新订单列表
+          _fetchOrders();
+        }
+      });
     });
   }
-
-  // 显示支付弹窗
-  void _showPaymentDialog(dynamic order) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('订单支付'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('商品: ${order['productName']}'),
-              Text('总价: ¥${order['totalAmount']?.toStringAsFixed(2) ?? '0.00'}'),
-              const SizedBox(height: 16),
-              const Text('请选择支付方式:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton(
-                    onPressed: () async {
-                      // 微信支付逻辑
-                      try {
-                        final response = await _apiService.createPayOrder(order['productId']);
-                        if (response['code'] == 'SUCCESS_0000') {
-                          Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('支付成功')),
-                          );
-                          // 刷新订单列表
-                          _fetchOrders();
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('支付失败: ${response['info']}')),
-                          );
-                        }
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('支付出错: $e')),
-                        );
-                      }
-                    },
-                    child: const Text('微信支付'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      // 支付宝支付逻辑
-                      Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('支付宝支付功能开发中')),
-                      );
-                    },
-                    child: const Text('支付宝支付'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // 已移除重复的 dispose 方法
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
@@ -155,7 +112,7 @@ class _OrderPageState extends State<OrderPage> {
       debugPrint('正在获取类型 $_selectedType 的订单数据');
       final response = await _apiService.getOrders(
         type: _selectedType,
-        page: isLoadMore ? _currentPage + 1 : 1,
+        page: isLoadMore ? _currentPage + 1 : 0,
         size: _pageSize,
       );
       
@@ -172,11 +129,18 @@ class _OrderPageState extends State<OrderPage> {
             } else {
               // 如果不是加载更多（即刷新或切换类型），替换整个列表
               _orders = newOrders;
-              _currentPage = 1;
+              _currentPage = 0;
             }
             
             _hasMore = _orders.length < total;
             _error = null; // 清除之前的错误信息
+
+            // 为待付款订单获取剩余时间
+            for (var order in _orders) {
+              if (order['orderStatus'] == '等待买家付款') {
+                _fetchOrderCountdown(order['orderId'].toString());
+              }
+            }
           } else {
             _error = response['info'] ?? '获取订单失败';
             if (!isLoadMore) {
@@ -196,6 +160,85 @@ class _OrderPageState extends State<OrderPage> {
       }
     }
   }
+
+  // --- 新增：显示支付二维码弹窗 ---
+  Future<void> _showPaymentQrCodeDialog(String productName, dynamic productId) async {
+    try {
+      // 确保 productId 是整数类型
+      final int productIdInt = int.parse(productId.toString());
+      final response = await _apiService.createPayOrder(productIdInt);
+      if (response['code'] == 'SUCCESS_0000') {
+        final String? qrCodeUrl = response['data'] as String?;
+        if (qrCodeUrl != null && qrCodeUrl.isNotEmpty) {
+          if (!mounted) return;
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: const Text('订单支付'),
+                content: SingleChildScrollView(
+                  child: ListBody(
+                    children: <Widget>[
+                      Text('请扫描下方二维码完成对商品 "$productName" 的支付：'),
+                      const SizedBox(height: 16),
+                      Center(
+                        child: Image.network(
+                          qrCodeUrl,
+                          height: 200,
+                          width: 200,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                    : null,
+                              ),
+                            );
+                          },
+                          errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
+                            return const Center(child: Text('二维码加载失败'));
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: <Widget>[
+                  TextButton(
+                    child: const Text('完成支付'),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      // 刷新订单列表
+                      _fetchOrders();
+                    },
+                  ),
+                ],
+              );
+            },
+          );
+        } else {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('获取支付二维码失败')),
+          );
+        }
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('创建支付订单失败: ${response['info']}')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('支付出错: $e')),
+      );
+    }
+  }
+  // --- 新增结束 ---
 
   @override
   Widget build(BuildContext context) {
@@ -231,16 +274,15 @@ class _OrderPageState extends State<OrderPage> {
                       itemCount: _orders.length,
                       itemBuilder: (context, index) {
                         final order = _orders[index];
-                        // 如果是待支付订单，启动倒计时
-                        if (order['orderStatus'] == '等待买家付款') {
-                          _startOrderTimer(order['orderId'].toString(), order['orderTime']);
-                        }
 
                         return GestureDetector(
                           onTap: () {
-                            // 仅对等待买家付款订单弹出支付窗口
+                            // 如果是待付款状态，点击显示支付二维码
                             if (order['orderStatus'] == '等待买家付款') {
-                              _showPaymentDialog(order);
+                              _showPaymentQrCodeDialog(
+                                order['productName'] ?? '未知商品',
+                                order['productId'],
+                              );
                             }
                           },
                           child: Card(
@@ -322,12 +364,28 @@ class _OrderPageState extends State<OrderPage> {
                                   // 添加倒计时显示
                                   if (order['orderStatus'] == '等待买家付款') ...[  
                                     const SizedBox(height: 8),
-                                    Text(
-                                      '剩余支付时间：${_calculateRemainingTime(order['orderTime'])}',
-                                      style: const TextStyle(
-                                        color: Colors.orange,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          '剩余支付时间：${_orderRemainingSeconds[order['orderId'].toString()] ?? 0}s',
+                                          style: TextStyle(
+                                            color: (_orderRemainingSeconds[order['orderId'].toString()] ?? 0) <= 0 
+                                                ? Colors.red 
+                                                : Colors.orange,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            _showPaymentQrCodeDialog(
+                                              order['productName'] ?? '未知商品',
+                                              order['productId'],
+                                            );
+                                          },
+                                          child: const Text('立即支付'),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ],
@@ -354,7 +412,7 @@ class _OrderPageState extends State<OrderPage> {
           setState(() {
             _selectedType = selected ? type : -1;
             _orders = [];
-            _currentPage = 1;
+            _currentPage = 0;
             _hasMore = true;
           });
           _fetchOrders();
